@@ -1,0 +1,360 @@
+---
+title: "Atividade 3 - Séries Temporais 2"
+author: 
+  - Caroline Cogo^[carolcogo808@gmail.com]
+  - João Inácio Scrimini^[joao.inacio.scrimini@gmail.com]
+  - Joelmir Junior^[moura22jr@hotmail.com]
+  - Renata Stone^[renastan@gmail.com]
+date: "`r format(Sys.time(), '%B %Y')`" #mes e ano automat
+geometry: margin=2cm
+output: bookdown::pdf_document2
+header-includes:
+   - \usepackage[brazil]{babel} #português
+   - \usepackage{float} #local das tabelas
+toc: true #sumário
+number_sections: true #numeração
+editor_options:
+  chunk_output_type: console #para visualizar os resultados no console
+#bibliography: ["ref.bib"] #arquivo com as referencias
+#bibliographystyle: "plain" #estilo das referencias
+link-citations: true #para aparecer o link na ref e acessar o site com 1 click
+---
+
+```{r setup, include=FALSE}
+{
+library(knitr)
+library(tseries)
+library(forecast)
+library(ggplot2)
+library(ggfortify)
+library(plotly)
+library(magrittr) # para tabulação %>%
+library(ggseas) #R package aims to help exploratory analysis of time series by making 
+#it easy to do seasonal adjustment and decomposition
+library(lmtest)
+library(ggpubr)
+library(fma)#Data Sets from ``Forecasting: Methods and Applications'' by
+#Makridakis, Wheelwright & Hyndman (1998)
+#devtools::install_github("FinYang/tsdl") #pacote time series data library
+#library(tsdl)
+library(fracdiff)
+library(arfima)
+}
+
+#devtools::install_github("https://github.com/AlissonRP/mypdf1/tree/dev")
+
+knitr::opts_chunk$set(echo=FALSE,error=F,message=F,warning=F,fig.pos = 'H',fig.align = 'center',fig.width=7.8, fig.height=4.65)
+#widht=largura
+
+options(digits=4)
+options(OutDec=",")
+```
+\newpage
+# Série Temporal
+
+Na Figura \ref{fig:g1} está sendo apresentada a série em estudo com 1000 observações.
+```{r g1, fig.cap="Gráfico da série temporal em estudo."}
+load("times.series.RData") # Série "ts"
+autoplot(ts)+xlab("Tempo") + ylab("Valores")+theme_minimal()
+```
+
+Agora, considerando a Figura \ref{fig:g2} (FAC), pode-se ver que existe autocorrelação, contendo um grande pico e significância no lag 1, diminuindo nos seguintes, entretanto a série não se torna significativa em nenhum lag. O decaimento da função de autocorrelação ocorre de forma lenta, indicando uma longa dependência entre as observações, além da possibilidade de modelagem ARFIMA. Agora, considerando a Figura \ref{fig:g3} (FACP), nota-se que o primeiro lag é significativo e ao decorrer dos lags, até antes do lag 20 temos algumas correlações significativas. Mas na sequência, as correlações tornam-se não significativas, estando dentro dos limites estabelecidos.
+
+```{r g2, fig.cap="Autocorrelação amostral (FAC Amostral) da série em estudo."}
+ggAcf(ts, lag.max=100,type = c("correlation"))+labs(y = "FAC Amostral",title="")+
+  theme_minimal()
+```
+
+```{r g3, fig.cap="Autocorrelação parcial amostral (FACP Amostral) da série em estudo."}
+ggAcf(ts, lag.max=100,type = c("partial"))+labs(y = "FACP Amostral",title="")+
+  theme_minimal()
+```
+
+```{r,include=FALSE}
+# Verificando normalidade:
+# Essa parte não aparece no relatorio, somente escrita sobre.
+shapiro.test(ts) # H0: Normalidade
+jarque.bera.test(ts) # H0: Normalidade
+# Dados não normais, p-valor menor que alpha
+``` 
+
+Sendo assim, na sequência foi verificado a presença de normalidade nos dados, através dos testes de Shapiro Wilk e Jarque-Bera.
+
+**Teste de Jarque-Bera**, **H0**: Os dados possuem distribuição
+normal.
+
+Com p valor igual a $4.736 \times e^{-7}$, ao nível de significância igual a
+$\alpha=0.05$, conclui-se que rejeitamos **H0**.
+
+**Teste de Shapiro Wilk**, **H0**: Os dados possuem distribuição
+normal.
+
+Com p valor igual a $0.0001014$, ao nível de significância igual a
+$\alpha=0.05$, conclui-se que rejeitamos **H0**.
+
+
+Como a série não apresenta normalidade, aplicou-se inicialmente a transformação de BoxCox nos dados, entretanto, após a transformação foi realizados os testes novamente e a série continuou não apresentando normalidade, por isso, continuamos as análises com os dados originais. Na Figura \ref{fig:g4}, é apresentado o envelope simulado (qq plot) da série, mas é possível perceber que nos extremos os ponto não estão bem ajustados e dentro das bandas de confiança do envelope simulado.
+
+```{r g4, fig.cap="Envelope simulado da série temporal em estudo."}
+ggqqplot(ts)
+```
+
+```{r,echo=FALSE,include=FALSE,eval=FALSE}
+# Essa parte não aparece no relatorio, somente escrita sobre.
+## Aplicação de boxcox 
+
+dados<-ts
+glambda<-BoxCox.lambda(dados,method = c("guerrero"))
+llambda<-BoxCox.lambda(dados, method = c("loglik"))
+bc21.dados<-BoxCox(dados, glambda)
+bc22.dados<-BoxCox(dados, llambda)
+
+shapiro.test(bc21.dados)
+jarque.bera.test(bc21.dados)
+ggqqplot(bc21.dados)
+
+# O método não deixou a série normal, logo não faz sentido manter a aplicação.
+# Nem mudou nada nos testes de normalidade.
+```
+
+
+# Testes de tendência deterministica e estocástica
+
+Pela Tabela \ref{tab:tend1} abaixo, em todos os testes de tendência determinística aplicados, os p-valores são inferiores ao alpha ($\alpha = 5\%$). Portanto, rejeita-se a hipótese nula ($H_0$), **considerando como $H_0$: Sem Tendência Determinística (STD) e $H_1$: Possui Tendência Determinística (TD)**. Sendo assim, conclui-se pelos testes realizados que a série apresenta tendência determinística.
+
+```{r, include=FALSE,eval=FALSE}
+# Analise de tend?ncia deterministica: 
+
+randtests::cox.stuart.test(ts,c("two.sided")) #H0: não existe tendencia
+trend::cs.test(ts) #H0: não existe tendencia
+randtests::runs.test(ts) #H0: não existe tendencia
+trend::ww.test(ts) #H0: não existe tendencia
+trend::mk.test(ts,continuity = TRUE) #H0: a série é i.i.d. / não existe tendencia
+Kendall::MannKendall(ts) #H0: não existe tendencia
+
+# Todos com tendência deterministica, p-valor menor que alpha.
+```
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Determinística}\label{tab:tend1}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+Cox-Stuart & \textit{cox.stuart} & STD & TD & $<2\times e^{-16}$ & TD\\
+\hline
+Cox-Stuart & \textit{cs.test} & STD & TD & $<2\times e^{-16}$ & TD\\
+\hline
+Wald-Wolfowitz & \textit{runs.test} & STD & TD &  $<2\times e^{-16}$ & TD\\
+\hline
+Wald-Wolfowitz & \textit{ww.test} & STD & TD & $<2\times e^{-16}$ & TD\\
+\hline
+Mann-Kendall & \textit{mk.test} & STD & TD & $<2\times e^{-16}$ & TD\\
+\hline
+Mann-Kendall & \textit{MannKendall} & STD & TD & $=<2\times e^{-16}$ & TD\\
+\hline
+\end{tabular}
+\end{table}
+
+
+```{r, include=FALSE}
+# Teste para raiz unitaria: 
+adf1<-adf.test(ts,alternative = c("stationary")) #H0: raiz unitária
+pp1<-pp.test(ts,alternative = c("stationary")) #H0: raiz unitária
+kp1<-kpss.test(ts, null = c("Level")) #H0: Nivel estac
+kpt1<-kpss.test(ts, null = c("Trend")) #H0: Tend estac
+
+# p > a NÃO REJEITA H0
+#p/ o adf e pp estacionario ,e p/ kpss Tem raiz unitaria e NÃO tem tendencia deterministica
+#Mesmo todos os testes de tendencia determinista apresentando tendencia, o KPSS não apresentou, é até engraçado isso.
+```
+
+A partir da Tabela \ref{tab:tend2}, considere RU como sendo a hipótese de existir raiz unitária e Estacionária como a hipótese de ter estacionariedade. Para o teste Aumentado de Dickey-Fuller (ADF) e teste de Phillips-Perron (PP), observa-se p-valor menor que $0,05$, logo, rejeitamos a hipótese nula ($H_0$), demonstrando não haver Raiz unitária. Agora, segundo os testes de Kwiatkowski-Phillips-Schmidt-Shin (KPSS), sendo o primeiro referente a tendência estocástica, a série apresentou raiz unitária, com p-valor sendo menor que $0,05$, rejeitando a hipótese nula ($H_0$). Já no segundo, referente  a tendência determinística, temos que a série apresenta estacionariedade, com p-valor maior que $0,05$, rejeitando $H_0$.
+
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Estocástica - Raiz Unitária}\label{tab:tend2}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+ADF & \textit{adf.test} & RU & Estacionária & `r adf1$p.value` & Estacionária\\
+\hline
+PP & \textit{pp.test} & RU & Estacionária & `r pp1$p.value` & Estacionária \\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & RU & `r kp1$p.value` & RU\\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & TD & `r kpt1$p.value` & Estacionária\\
+\hline
+\end{tabular}
+\end{table}
+
+# Verificando memória longa
+
+A partir dos resultados das análises anteriores podemos verificar que a série apresenta as duas tendências, determinística e estocástica. Além de que o gráfico ACF indicou decaimento lento, ou seja, indicativo de longa dependência entre as observações. 
+
+Na Tabela \ref{tab:abc} é calculado o estimador de Geweke e Porter-Hudar (GPH), usado para encontrar o alpha apropriado ao estudo, indicando a longa dependência. Note que, o esperado é um GPH de até $0.5$, nesse caso a dependência longa  vai até o alpha = 0,65 o qual apresenta valor de GPH menor que 0,5. Com isso, prova-se que utilizar o modelo ARFIMA é apropriado para a série.
+```{r, eval=FALSE,include=FALSE}
+#Ajuste de um processo ARFIMA(p,d,q) com estimação do parâmetro d utilizando o estimador de Geweke e Porter-Hudar (GPH).
+
+alpha<-seq(0.5,0.9,by=0.05)
+estmation.gph<-matrix(ncol=2,nrow=length(alpha))
+colnames(estmation.gph)<-c("Alpha","GPH")
+for(j in 1:length(alpha)){
+  estmation.gph[j,]<-c(alpha[j],fdGPH(x=ts, bandw.exp = alpha[j])$d)
+}
+estmation.gph<-data.frame(estmation.gph)
+mypdf1::pdf1_tbl(estmation.gph,full_page = F)
+
+# Não incluir no relatório
+# Por esse ficou estranho, então apresentar só o abaixo.
+```
+
+```{r abc}
+#Ajuste de um processo ARFIMA(p,d,q) com estimação do parâmetro d utilizando o estimador de Reisen (SPR), com β=0.9.
+
+alpha<-seq(0.5,0.9,by=0.05)
+estmation.spr<-matrix(ncol=2,nrow=length(alpha))
+colnames(estmation.spr)<-c("Alpha","GPH")
+for(j in 1:length(alpha)){
+  estmation.spr[j,]<-c(alpha[j],fracdiff::fdSperio(x=ts,bandw.exp=alpha[j],beta=0.9)$d)
+}
+estmation.spr<-data.frame(estmation.spr)
+mypdf1::pdf1_tbl(estmation.spr,title = "Ajuste de um processo ARFIMA(p,d,q) com estimação do parâmetro d utilizando o estimador de Reisen (SPR), com $\\beta$=0,9.",full_page = F)
+
+# Por essa tabela vemos que existe dependencia longa até alpha = 0,65
+# apresentando valor de GPH menor que 0,5.
+# Isso prova que deve-se utilizar o modelo ARFIMA
+```
+
+
+# Seleção do modelo
+
+Nesta seção serão apresentados a seleção do melhor modelo para a série temporal em estudo, junto com a predição e previsão de 12 períodos. Na tabela \ref{tab:select1} é possível visualizar as estimatimas para os modelos nos quais foram ajustados, com no máximo p e q iguais a 2. Portanto, o melhor modelo verificado foi o modelo de p e q iguais a 1, e d = 0,3884. O modelo apresentou menor AIC e também o maior likelihood, os resíduos passando no teste de Box-Pierce de lag = 10 com p-valor de 0,8583, não rejeitando a hipótese nula de não autocorrelação entre os resíduos. Pela tabela \ref{tab:cof1} é apresentado os coeficientes deste modelo, na qual, todos os parâmetros foram muito sifnificativos. Pelo teste de Shapiro-Wilk para os resídios, obteve-se p-valor de 0,6, não rejeitando a hipótese nula de normalidade dos resíduos, podendo ser visualizado pelo envelope simulado dos resíduos pela Figura \ref{fig:qq2} onde os resíduos estão praticamente todos ajustados dentro das bandas de confiança, mostrando um bom ajuste do modelo.  
+
+```{r select1}
+# Verificando quais os melhores valores para os parametros
+npar<-matrix(ncol=2,nrow=9)
+k<-1
+for(j in c(0:2)){#p
+  for(i in c(0:2)){#q
+    npar[k,]<-c(j,i)
+    k<-k+1
+  }
+}
+#----------------------------------------------------------------
+model.arfima<-matrix(ncol=6,nrow=length(npar[,1]))
+colnames(model.arfima)<-c("p","q","Likelihood","AIC","PValue_BOX","d")
+k<-1
+for(j in 1:length(npar[,1])){
+  b1<-adf.test(ts, alternative ="stationary")
+  b2<-pp.test(ts, alternative ="stationary")               
+  mod1<-fracdiff(x=ts,nar=npar[j,1],nma=npar[j,2])
+  a<-Box.test(residuals(mod1),lag = 10)
+  if(a$p.value>=0.05 & coefficients(mod1)[1]>0.05){
+    model.arfima[k,]<-c(npar[j,],mod1$log.likelihood,AIC(mod1),a$p.value,
+                        coefficients(mod1)[1])
+    k<-k+1
+  }
+  write(j, file = "contagem.txt",append=TRUE)
+}
+#----------------------------------------------------------------
+model.arfima<-data.frame(model.arfima)
+#O comando na.omit vai retirar todas as linhas que tenham pelo menos um NA:
+model.arfima<-na.omit(model.arfima)
+mypdf1::pdf1_tbl(model.arfima,title = "Estimativas dos modelos com no máximo p e q iguais a 2.",full_page = F)
+
+# Por essa tabela podemos ver que o menor AIC, ficou para a segunda linha, com 2821
+# p = 1 e q = 1, onde d = 0,3884
+# E p-valor de 0,8583 maior que alpha para 'Box-Pierce test', assim os residuos 
+# não apresentando autocorrelação entre eles.
+# E ainda esse modelo apresenta o maior Likelihood.
+
+
+#obs.: Foi gerado apenas com no max p=2 e q=2
+```
+
+```{r,include=FALSE}
+dados<-ts
+mod<-fracdiff(x=dados,nar=1,nma=1)
+summary(mod)
+```
+
+\begin{table}[H] 
+\caption{\label{tab:cof1}Coeficientes do modelo ARFIMA(p=1,d=0,3884,q=1).}
+\begin{center}
+\begin{tabular}{lrrrrl}
+\hline
+  & Estimativa & Erro Padrão & Estatística Z & P-valor(>|z|)\\
+\hline
+d & 0,3884 & 0,0094  & 41,2 & $<2\times e^{-16}$ & ***\\
+ar & 0,4081 & 0,0324 & 12,6  & $<2\times e^{-16}$ & ***\\
+ma  & -0,8353 & 0,0181 & -46,2 & $<2\times e^{-16}$ & ***\\
+\hline
+\end{tabular}
+\\\tiny{\hspace{-5cm} Código de significância: $0\ ^{***}\ 0.001\ ^{**}\ 0.01\ ^{*}\ 0.05\ ^{.}\ 0.1 \ 1$}
+\end{center}
+\end{table}
+
+```{r, include=FALSE}
+# Acho que não tem necessidade de aparecer isso no relatório.
+tabconf<-confint(mod,level=0.95)
+mypdf1::pdf1_tbl(tabconf,title = "",full_page = F)
+```
+
+```{r,include=FALSE}
+# Comentar sobre o teste.
+res.mod<-residuals(mod)
+Box.test(res.mod,lag=10, type="Ljung-Box") # H0: Residuos não autocorrelacionados
+Box.test(res.mod,lag=10, type="Box-Pierce") # H0: Residuos não autocorrelacionados
+shapiro.test(res.mod) # H0: Normalidade
+# p-valores maiores que alpha, NÃO rejeita-se H0
+# Passou nos testem inclusive normalidade :)
+```
+
+```{r qq2, fig.cap="Envelope simulado dos resídios do modelo ARFIMA(p=1,d=0,3884,q=1) para a série em estudo."}
+ggqqplot(residuals(mod))
+# Ta otimo o qqplot :)
+```
+
+Na Tabela \ref{tab:prev} é apresentado a previsão de 12 períodos para a série em estudo, com os limites de 80% e 95%, podendo ser visualizado pela Figura \ref{fig:gfinal}, na qual, é apresentado a predição, a previsão de 12 períodos e os limetes de 95% (Cinza). Observa-se que o modelo prediz muito bem a série temporal, mostrado em vermelho. Para a previsão nota-se que a previsão tende a "estacionar", convergir para média, mostrando que o modelo não é muito apropriado para previsões muito longas, com 12 períodos já é nítido esse comportamento. Assim, sendo sugerido para previsões menores.
+```{r prev}
+predict.mod<-forecast(mod,h=12)
+mypdf1::pdf1_tbl(predict.mod,title = "Previsão de 12 períodos do modelo ARFIMA(p=1,d=0,3884,q=1) para a série em estudo.",full_page = F)
+```
+
+```{r gfinal, fig.cap="Predição e previsão de 12 períodos do modelo ARFIMA(p=1,d=0,3884,q=1) com limites de 95\\% para a série em estudo."}
+d<-dados
+tmp.df<-cbind(c(d,predict.mod$mean),predict.mod$mean,predict.mod$fitted,predict.mod$upper[,2],
+              predict.mod$lower[,2],predict.mod$upper[,2],predict.mod$lower[,2])
+colnames(tmp.df)<-c("Dados","Previsão","Predição","LS","LI","LSa","LIa")
+Time<-1:(1000+12) 
+predict.df<-data.frame(Time,tmp.df)
+#tail(predict.df)
+
+# Apenas acrescentar a parte de predição e o tempo em meses/anos
+dt1<- predict.df |> 
+  tidyr::pivot_longer(`Dados`:`LI`,
+                      names_to = "series", values_to = "valor")
+ggplot(dt1) +
+  aes(x = Time, y = valor, colour = series) +
+  geom_ribbon(aes(ymin = LIa, ymax = LSa),
+              fill = "gray", alpha = 0.25)+
+  geom_line(size = 0.5) +
+  scale_color_manual(
+    values = c(Dados = "black",
+               #LI = "#128928",
+               #LS = "#08E419",
+               Predição = "red",
+               Previsão = "blue")
+  ) +
+  labs(x = "Tempo", y = "Dados", color= "Modelo") +
+  theme_minimal()
+```
+
+
+
+
+

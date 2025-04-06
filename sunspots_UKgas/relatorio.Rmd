@@ -1,0 +1,814 @@
+---
+title: "Atividade 2 - Séries Temporais 2"
+author: 
+  - Caroline Cogo^[carolcogo808@gmail.com]
+  - João Inácio Scrimini^[joao.inacio.scrimini@gmail.com]
+  - Joelmir Junior^[moura22jr@hotmail.com]
+  - Renata F. Stone^[renastan@gmail.com]
+date: "`r format(Sys.time(), '%B %Y')`" #mes e ano automat
+geometry: margin=2cm
+output: bookdown::pdf_document2
+header-includes:
+   - \usepackage[brazil]{babel} #português
+   - \usepackage{float} #local das tabelas
+toc: true #sumário
+number_sections: true #numeração
+editor_options:
+  chunk_output_type: console #para visualizar os resultados no console
+#bibliography: ["ref.bib"] #arquivo com as referencias
+#bibliographystyle: "plain" #estilo das referencias
+link-citations: true #para aparecer o link na ref e acessar o site com 1 click
+---
+
+```{r setup, include=FALSE}
+{
+  library(tinytex)
+  library(tseries)
+  library(forecast)
+  library(ggplot2)
+  library(plotly)
+  library(ggseas) 
+  library(lmtest)
+  library(ggpubr)
+  library(fma)
+  #library(tsdl)
+  library(TTR)
+  library(readxl)
+  library(mvtnorm)
+  library(tidyquant)
+  library(dplyr)
+  library(astsa)
+  library(L1pack)
+  library(webr)
+  library(randtests)
+  library(Kendall)
+  library(EnvStats)
+  library(trend)
+  library(seastests)
+  library(knitr)
+  library(datasets)
+  suppressMessages(library(moments))
+}
+
+knitr::opts_chunk$set(echo=FALSE,error=F,message=F,warning=F,fig.pos = 'H',fig.align = 'center',fig.width=7.8, fig.height=4.65)
+#widht=largura
+
+options(digits=4)
+options(OutDec=",")
+```
+
+\newpage
+
+<!-- %comentarios e lembretes  -->
+<!--  $82,26\%$ #como usar percetagem  
+assim que se comenta em rmark clique: Ctrl + Shift + C-->
+<!-- Rodapé: teste^[testo] -->
+<!-- [^1]:[[Acesse o banco de dados aqui](https://www3.bcb.gov.br/sgspub/localizarseries/localizarSeries.do?method=prepararTelaLocalizarSeries)] tentando fazer a merda do rodapé a 30k anos-->
+<!-- tem que revisar as tabelas para ver se estão com as interpretações corretas-->
+<!-- Quando quer referenciar graf e tabelas sempre cuidar o label e o nome do chunk, para chunk é preciso estar preenchido "fig.cap=" -->
+<!-- echo=TRUE, results='hide' mostra o cod no relatorio e esconde os resultados, para não rodar,eval=F, indica se o código deve ser executado  -->
+
+\newpage
+# Exercício 1: Números Mensais de Manchas Solares, 1749-1983.
+
+## Análise inicial
+Nessa análise serão considerados dados mensais sobre Manchas Solares, o período da série temporal é entre os anos de 1749 até 1983. Na Figura \ref{fig:graf1} é apresentada a série com 2820 observações.
+
+```{r graf1, include=TRUE, fig.cap="Gráfico da série amostral"}
+d1<-sunspots
+autoplot(d1)+theme_minimal()
+```
+
+Agora, considerando a Figura \@ref(fig:graf2) (FAC), pode-se ver que existe autocorrelação, contendo um grande pico e significância no lag 1, diminuindo nos seguintes, e voltando a ser significativo em somente dois pontos, aproximadamente, perto de 36 e perto de 89. O decaimento da função de autocorrelação ocorre de forma lenta, indicando a dependência entre as observações. Agora, considerando a Figura \@ref(fig:graf3) (FACP) nota-se que o primeiro lag é significativo e ao decorrer dos lags, até aproximadamente o lag 24 temos algumas correlações significativas. Mas na sequência, as correlações tornam-se não significativas, estando dentro dos limites estabelecidos. 
+
+```{r graf2, include=TRUE, fig.cap="Gráfico da Função de autocorrelação amostral"}
+ggAcf(d1, lag.max=100,type = c("correlation"))+labs(y = "FAC Amostral",title="")+
+  theme_minimal()
+```
+
+```{r graf3, include=TRUE, fig.cap="Gráfico da Função de autocorrelação parcial"}
+ggAcf(d1, lag.max=100,type = c("partial"))+labs(y = "FACP Amostral",title="")+
+  theme_minimal()
+```
+
+Na sequência é feita a análise para avaliar se a série apresenta outliers, os quais podem influenciar na modelagem.
+
+```{r graf4, include=TRUE, fig.cap="Gráfico Boxplot da série amostral"}
+boxplot(d1)
+```
+
+Na Figura \ref{fig:graf4}, no Boxplot é indicado a existência de alguns pontos acima do limite, o que torna-os possíveis outliers. Para a confirmação foram testados cinco observações $(2506, 2508, 353, 2505$ e $2521)$, entre elas as observações $2506, 2508, 353$ e $2505$ foram consideradas outliers pelo Teste de Rosner e assim retiradas da série temporal, resultando em 2816 observações no total. 
+
+```{r, include=FALSE}
+test <- rosnerTest(d1, k=5) #k= n?meros de possiveis outliers
+test$all.stats
+
+# Temos 4 outliers em 2506, 2508, 353 e 2505 
+# Retirando:
+d1<-d1[-c(2506,2508,353,2505)]
+d1<-ts(d1)
+```
+
+Após a identificação e retirada de outliers da série, será iniciados os testes para avaliar normalidade, tendência determinística, raiz unitária e sazonaliade.
+
+## Aplicação dos Testes
+
+### Testes de normalidade
+
+```{r, include=FALSE}
+## Teste de normalidade 
+
+sha1<-shapiro.test(d1) #H0:a amostra tem distribuição normal
+jqb1<-jarque.bera.test(d1) #H0: Os erros possuem distribuicao normal
+#ggqqplot(d1)
+# Série não apresenta normalidade, aplicar boxcox
+```
+
+**Teste de Jarque-Bera**, **H0**: Os dados possuem distribuição
+normal.
+
+Com p valor igual a $<2\times e^{-16}$, ao nível de significância igual a
+$\alpha=0.05$, conclui-se que rejeitamos **H0**.
+
+**Teste de Shapiro Wilk**, **H0**: Os dados possuem distribuição
+normal.
+
+Com p valor igual a `r sha1$p.value`, ao nível de significância igual a
+$\alpha=0.05$, conclui-se que rejeitamos **H0**.
+
+
+Como a série não apresenta normalidade, aplicou-se inicialmente a transformação de BoxCox nos dados, entretanto, após a transformação foi realizados os testes novamente e a série continuou não apresentando normalidade, por isso, continuamos as análises com os dados originais.
+
+```{r, incluse=F, results='hide'}
+## Aplicação de boxcox 
+
+dados<-d1
+glambda<-BoxCox.lambda(dados,method = c("guerrero"))
+#llambda<-BoxCox.lambda(dados, method = c("loglik"))
+bc21.dados<-BoxCox(dados, glambda)
+#bc22.dados<-BoxCox(dados, llambda)
+
+shapiro.test(bc21.dados)
+jarque.bera.test(bc21.dados)
+#ggqqplot(bc21.dados) #deixar esse graf?? -CAROL
+
+# O método não deixou a série normal, logo não faz sentido manter a aplicação
+```
+
+### Teste de tendência deterministica
+
+```{r, include=FALSE}
+# Analise de tend?ncia deterministica: 
+#corrigid por CAROL
+cox1<-cox.stuart.test(d1,c("two.sided")) #H0: não existe tendencia
+cs1<-cs.test(d1) #H0: não existe tendencia
+run1<-runs.test(d1) #H0: não existe tendencia
+ww1<-trend::ww.test(d1) #H0: não existe tendencia
+mk1<-trend::mk.test(d1,continuity = TRUE) #H0: a série é i.i.d. / não existe tendencia
+mann1<-MannKendall(d1) #H0: não existe tendencia
+
+# Todos com tendência deterministica, exceto 1 test, p-valor menor que alpha
+```
+
+Pela Tabela \ref{tab:exercicio1} abaixo, na maioria dos testes de tendência determinística aplicados, os p-valores são inferiores ao alpha ($\alpha = 5\%$). Portanto, rejeita-se a hipótese nula ($H_0$), **considerando como $H_0$: Sem Tendência Determinística (STD) e $H_1$: Possui Tendência Determinística (TD)**. Apenas a rotina \textit{cox.stuart} não rejeitou H0.
+
+Sendo assim, conclui-se pelos testes realizados que a série apresenta tendência determinística.
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Determinística}\label{tab:exercicio1}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+Cox-Stuart & \textit{cox.stuart} & STD & TD & `r cox1$p.value` & STD\\
+\hline
+Cox-Stuart & \textit{cs.test} & STD & TD & `r cs1$p.value` & TD\\
+\hline
+Wald-Wolfowitz & \textit{runs.test} & STD & TD &  $<2\times e^{-16}$ & TD\\
+\hline
+Wald-Wolfowitz & \textit{ww.test} & STD & TD & $<2\times e^{-16}$ & TD\\
+\hline
+Mann-Kendall & \textit{mk.test} & STD & TD & `r mk1$p.value` & TD\\
+\hline
+Mann-Kendall & \textit{MannKendall} & STD & TD & $<2.22 \times e^{-16}$ & TD\\
+\hline
+\end{tabular}
+\end{table}
+
+### Teste de raiz unitária
+```{r, include=FALSE}
+# Teste para raiz unit?ria: 
+#corrigid por CAROL
+adf1<-adf.test(d1,alternative = c("stationary")) #H0: raiz unitária
+pp1<-pp.test(d1,alternative = c("stationary")) #H0: raiz unitária
+kp1<-kpss.test(d1, null = c("Level")) #H0: Nivel estac
+kpt1<-kpss.test(d1, null = c("Trend")) #H0: Tend estac
+
+# p > a NÃO REJEITA H0
+#p/ o adf e pp estac. e p/ kpss Tem raiz unitaria e tem tendencia deterministica 
+```
+
+A partir da Tabela \ref{tab:exercicio12}, considere RU como sendo a hipótese de existir raiz unitária e Estacionária como a hipótese de ter estacionariedade. Para o teste Aumentado de Dickey-Fuller (ADF) e teste de Phillips-Perron (PP), observa-se p-valor menor que $0,05$, logo, rejeitamos a hipótese nula ($H_0$), demonstrando não haver Raiz unitária. Agora, segundo os testes de Kwiatkowski-Phillips-Schmidt-Shin (KPSS), sendo o primeiro referente a tendência estocástica, a série apresentou raiz unitária, com p-valor sendo menor que $0,01$, rejeitando a hipótese nula ($H_0$). Já no segundo, referente  a tendência determinística, temos que a série apresenta tendência determinística, com p-valor menor que $0,01$, rejeitando $H_0$.
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Estocástica - Raiz Unitária}\label{tab:exercicio12}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+ADF & \textit{adf.test} & RU & Estacionária & `r adf1$p.value` & Estacionária\\
+\hline
+PP & \textit{pp.test} & RU & Estacionária & `r pp1$p.value` & Estacionária \\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & RU & `r kp1$p.value` & RU\\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & TD & `r kpt1$p.value` & TD\\
+\hline
+\end{tabular}
+\end{table}
+
+Com os resultados dos testes das Tabelas \ref{tab:exercicio1} e \ref{tab:exercicio12}, podemos verificar que a série apresenta as duas tendências, determinística e estocástica. 
+
+Na sequência é realizado o método de diferenciação na série em estudo, e após são aplicados novamente os mesmos testes das Tabelas \ref{tab:exercicio1} e \ref{tab:exercicio12}, e conclui-se que a série diferenciada não possui tendência determinisitca e estocástica, e é estacionária.
+
+```{r, include=FALSE}
+#como n vai no relatorios, deixei todos juntos
+
+diff.TX<-diff(d1, differences = 1)
+autoplot(diff.TX)+theme_minimal() # não precisa ir no relatorio
+
+# Analise de tendencia deterministica ajustado: 
+
+cox.stuart.test(diff.TX,c("two.sided")) #H0: não existe tendencia
+cs.test(diff.TX) #H0: não existe tendencia
+runs.test(diff.TX) #H0: não existe tendencia
+ww.test(diff.TX) #H0: não existe tendencia
+mk.test(diff.TX,continuity = TRUE) #H0: a série é i.i.d. / não existe tendencia
+MannKendall(diff.TX) #H0: não existe tendencia
+
+#apenas p ww.test e runs.test q dá com tendencia
+
+# Teste para raiz unit?ria ajustado:  
+adf.test(diff.TX,alternative = c("stationary")) #H0: raiz unitária
+pp.test(diff.TX,alternative = c("stationary")) #H0: raiz unitária
+kpss.test(diff.TX, null = c("Level")) #H0: Nivel estac
+kpss.test(diff.TX, null = c("Trend")) #H0: Tend estac
+
+#estac estac estac estac
+# Nao tem tendencia e estac
+```
+
+### Testes de Sazonalidade
+
+Considere que para uma série temporal ser sazonal (possuir sazonalidade) é preciso que os fenômenos que ocorrem durante o tempo se repitam em um período idêntico de tempo. Logo, testes pra identificar sazonalidade na série ajustada foram feitos.
+
+```{r, include=FALSE}
+## Sazonalidade 
+
+kw1<-kw((d1), freq=12, diff=T, residuals=F, autoarima = T) #H0: Não Sazonal
+fried1<-fried((d1), freq=12, diff=T, residuals=F, autoarima = T) #H0: Não Sazonal
+# Série sazonal, aplicado com diferenciação (diff= T)
+
+#ao meu ver deu os dois sazonais -CAROL
+# São sazonais eu me esqueci de tirar  o comentario, aquilo era do outra analise kkkkk - João
+```
+
+Com a série já diferenciada, testamos a presença de sazonalidade nos dados, através do Teste de sazonalidade de Kruskall-Wallis e o de Friedman, em que para ambos os testes, consideramos $H_0$ como a série não sendo sazonal. Na Tabela \ref{tab:exercicio13} estão os p-valor obtidos. Para os dois testes o p-valor foi menor que $0,05$, rejeitando a hipótese nula ($H_0$) e indicando que a série possui sazonalidade.
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Sazonalidade}\label{tab:exercicio13}
+\begin{tabular}{l|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & P-valor & Conclusão\\
+\hline
+Kruskall Wallis & \textit{kw} & Não Sazonal  & `r kw1$Pval` & Sazonal\\
+\hline
+Friedman & \textit{fried} & Não Sazonal & `r fried1$Pval` & Sazonal \\
+\hline
+\end{tabular}
+\end{table}
+
+
+## Modelagem
+
+Inicialmente, para a modelagem foi feita a divisão da série temporal entre treino e teste. Na série de treino ficou definida 2804 observações, enquanto que para a série de teste ficou 12 observações. Com o objetivo de aplicar sobre o modelo de treino e depois avaliar a acurácia, no modelo de teste. Na Figura \ref{fig:graf5}, através do gráfico, é possível perceber a divisão feita na série temporal.
+
+```{r, include=FALSE}
+# Treino e Teste  
+
+dts<-ts(d1,start = c(1749,5), frequency = 12)
+#Separar a serie em treino e teste:
+#Coloquei como inicio no mes 5 por causa que retiramos 4 outliers.
+tr<- ts(d1[1:2804],start = c(1749,5), frequency = 12) 
+te<- ts(d1[2805:2816],start = c(1983,1), frequency = 12)
+# Deixar 2 anos para treino
+
+#Aplica-se sobre o modelo de treino e dps testa a acuracia no modelo de teste.
+
+#Grafico do modelo de treino e de teste, divisao feita:
+
+d1a<-c(tr,te)
+d2a<-c(rep("Treino",2804),rep("Teste",12))
+date <- as.Date("1749/05/01")
+t1<-seq(date, by = "month", length.out = length(d1a)) 
+dt<-data.frame(d1a,d2a,t1)
+t1[2804]
+```
+
+
+```{r graf5, include=TRUE, fig.cap="Gráfico da série dividida em treino e teste"}
+ggplot(dt) +
+  aes(x = t1, y = d1a, colour = d2a) +
+  geom_line(size = 0.5) +
+  scale_color_brewer(palette = "Set1", direction = 1) +
+  labs(x = "Tempo", y = "Dados", color= "Modelo") +
+  theme_minimal()
+### Até aqui está OK ###
+```
+
+
+Foram considerados dois modelos SARIMA:
+
+\begin{itemize}
+	\item Modelo 1 = (ar1, ar2, ma1, ma2, sar1, sma1, sma2) = (2,1,2)(1,0,2)[12]
+	\item Modelo 2 = (ar1, ar2, ma1, ma2, sma1, sma2) = (2,1,2)(0,0,2)[12]
+\end{itemize} 
+
+Para cada modelo foi feito o calcúlo das medidas de acurácia e a análise de resíduos, a fim de escolher o melhor modelo possível.
+
+## Cálculo das medidas de acurácia
+
+Pode-se perceber que considerando o critério de informação de Akaike (AIC), ambos modelo estão próximos, afinal eles apresentaram uma pequena diferença, o modelo 1 resultou em 23290 enquanto que o do modelo 2 foi de 23291. 
+
+```{r, include=FALSE}
+# Medidas de acuracia sobre o modelo de teste -------------------------------- #
+# mod1<-arima(x = tr,order = c(2,1,2),list(order =c(1, 0, 2), period = 12))
+# mod2<-arima(x = tr,order = c(2,1,2),list(order =c(0, 0, 2), period = 12))
+
+# save(mod1,file="mod1")
+# save(mod2,file="mod2")
+
+# Pelo treco do professor ele não reconhece o mod2, portanto aqui
+# a comparação vai ser entre o auto.arima e o melhor selecionado no script do prof
+load("mod1")
+load("mod2")
+
+mod1.for<-forecast(mod1,h = 12)
+mod2.for<-forecast(mod2,h = 12)
+
+ac.mod1.for<-accuracy(mod1.for$mean,te)
+ac.mod2.for<-accuracy(mod2.for$mean,te)
+
+ac.mod.for<-rbind(ac.mod1.for,ac.mod2.for)
+rownames(ac.mod.for)<-c("Modelo 1","Modelo 2")
+mypdf1::pdf1_tbl(ac.mod.for)
+# Medidas de acuracia sobre o modelo de teste -------------------------------- #
+# mod1<-arima(x = tr,order = c(2,1,2),list(order =c(1, 0, 2), period = 12))
+# mod2<-arima(x = tr,order = c(2,1,2),list(order =c(0, 0, 2), period = 12))
+
+# Pelo treco do professor ele não reconhece o mod2, portanto aqui
+# a comparação vai ser entre o auto.arima e o melhor selecionado no script do prof
+
+
+mod1.for<-forecast(mod1,h = 12)
+mod2.for<-forecast(mod2,h = 12)
+
+ac.mod1.for<-accuracy(mod1.for$mean,te)
+ac.mod2.for<-accuracy(mod2.for$mean,te)
+
+ac.mod.for<-rbind(ac.mod1.for,ac.mod2.for)
+rownames(ac.mod.for)<-c("Modelo 1","Modelo 2")
+
+```
+
+Agora, na Tabela \ref{tab:tab4}, é apresentado as medidas de acúracia de cada modelo, realizadas sobre a série de treino, em um periodo de 12 meses, nota-se que o modelo 2 apresentou menores erros de previsão, apenas no teste ACF1 que o modelo 1 apresentou-se menor. Com essas análises, podemos perceber que o modelo 2 teve melhor ajuste e menores erros de previsão. Portanto utilizaremos o modelo 2 para realizar as previsões.
+
+```{r tab4, include=TRUE}
+mypdf1::pdf1_tbl(ac.mod.for,"Medidas de acurácia")
+
+```
+
+## Análise de resíduo do modelo escolhido
+
+```{r,include=FALSE}
+#Análise de Resíduos: -------------------------------------------------------- #
+mod3<-arima(x = d1,order = c(2,1,2),seasonal = list(order =c(0, 0, 2), period = 12))
+# save(mod3,file="mod3")
+load("mod3")
+#Modelo Ajstado
+#summary(mod)
+#Verificação das Suposições do Modelo
+plot(mod3)
+#Polinômios conforme Brockwell e Davis (1991)
+coeftest(mod3)
+#Intervalo de Confiança dos parâmetros
+#confint(mod3,level=0.95)
+#Análise de Resíduos
+res.mod<-mod3$residuals
+#ggtsdisplay(res.mod)
+Box.test(res.mod,lag = 15, type="Ljung") 
+#h0: são não correlacionados
+#checkresiduals(mod,lag=15,df=15,test="LB")
+shapiro.test(res.mod)
+adf.test(res.mod, alternative ="stationary")
+ggqqplot(res.mod)
+
+# # Predição e Previsão do modelo de treino ------------------------------------ #
+# forecast::autoplot(mod2)+ggtitle("Dados")+ 
+#   xlab("Time") + ylab("Valores $")+theme_minimal()
+# 
+# predict.mod<-forecast(mod2,h=12)
+# #mypdf1::pdf1_tbl(predict.mod)
+# 
+# autoplot(predict.mod)+
+#   ggtitle("Dados")+ 
+#   xlab("Time") + ylab("Valores")+theme_minimal()
+```
+
+Na Figura \ref{fig:uni1} é apresentado o gráfico com os cículos unitários, em que são calculadas as inversas das raízes de cada polinômio autoregressivo e de médias móveis. Nesse caso todas as raízaes estão dentro do círculo unitário, logo eles são inversíveis e estacionários. 
+
+```{r uni1,fig.cap="Representação do circulo unitário para o modelo 2"}
+plot(mod3)
+```
+
+Pelo Box-Ljung test os resíduos não apresentaram correlação, com p-valor = 0,1, e utilizando lag = 15. Pelo Dickey-Fuller Test os resíduos apresentaram estacionariedade, com $p-valor = 0,01$. Os resíduos não apresentaram normalidade (shapiro.test, $p-valor < 2\times e^{-16}$).
+
+## Predição/Previsão do modelo escolhido
+
+```{r tabprev1, include=TRUE}
+predict.mod<-forecast(mod3,h = 12) # Previsão de 1 ano
+mypdf1::pdf1_tbl(predict.mod,title = "Previsão de 12 meses para o modelo 2")
+```
+
+Na Tabela \ref{tab:tabprev1} é apresentado as previsões para os próximos 12 meses utilizando o modelo 2, nota-se que a cada mês espera-se uma alterção entre $19,60$ a $41,34$, diminuido com o passar dos meses, com margem de erro médio de $19,74$ até $36,67$ para nível de confiança de $80\%$ e margem de erro médio de $30,18$ até $56,08$ para nível de conficança de $95\%$ e pela Figura \ref{fig:grafpred1} vemos esse ajuste da predição do modelo SARIMA(2,1,2)(0,0,2)[12] e da previsão de 12 meses para a série original, com os limites $95\%$.
+
+```{r grafpred1, include=TRUE, fig.cap="Gráfico da série contendo a predição do modelo final SARIMA(2,1,2)(0,0,2)[12] e predição de 12 meses, com limites superior e inferior de 95\\%."}
+
+d<-d1
+tmp.df<-cbind(d,predict.mod$mean,predict.mod$upper[,2],
+              predict.mod$lower[,2],predict.mod$fitted)
+colnames(tmp.df)<-c("Dados","Previsão","LS","LI","Predição")
+date <- as.Date("1749/05/01")
+Time<-seq(date, by = "month", length.out = length(d)+12) 
+predict.df<-data.frame(Time,tmp.df)
+
+dt1<- predict.df |> 
+  tidyr::pivot_longer(`Dados`:`Predição`,
+                      names_to = "series", values_to = "valor")
+ggplot(dt1) +
+  aes(x = Time, y = valor, colour = series) +
+  geom_line(size = 0.5) +
+  scale_color_manual(
+    values = c(Dados = "black",
+               LI = "#128928",
+               LS = "#08E419",
+               Predição = "red",
+               Previsão = "blue")
+  ) +
+  labs(x = "Tempo", y = "Dados", color= "Modelo") +
+  theme_minimal()
+
+```
+
+
+\newpage
+
+# Exercício 2: Consumo Trimestral de Gás do Reino Unido.
+
+## Análise inicial
+
+Nessa análise serão considerados dados trimestrais sobre o consumo de gás do Reino Unido, o período da série temporal é entre os anos de 1960 até 1987. Na Figura \ref{fig:graf21} é apresentada a série com 108 observações.
+```{r graf21, include=TRUE, fig.cap="Gráfico da série amostral"}
+# UK Quarterly Gas Consumption
+d2<-UKgas
+autoplot(d2)+theme_minimal()
+#tend deterministica
+```
+
+Agora, considerando a Figura \@ref(fig:graf22) (FAC), pode-se ver que existe autocorrelação, entretanto não existe autocorrelação constante, diminuindo durante os primeiros lags, e voltando a ser significativo em partes, aproximadamente, entre os lags 35 até 45. O decaimento da função de autocorrelação ocorre indicando um possível padrão. A partir do lag 87, aproximadamente, a série é significativa, sem autocorrelação. Agora, considerando a Figura \@ref(fig:graf23) (FACP) nota-se que os primeiros lags são significativos, e partir do lag 6 temos correlações não significativas, dentro dos limites estabelecidos.
+
+```{r graf22, include=TRUE, fig.cap="Gráfico da Função de autocorrelação amostral"}
+ggAcf(d2, lag.max=100,type = c("correlation"))+labs(y = "FAC Amostral",title="")+
+  theme_minimal()
+```
+
+
+```{r graf23, include=TRUE, fig.cap="Gráfico da Função de autocorrelação parcial"}
+ggAcf(d2, lag.max=100,type = c("partial"))+labs(y = "FACP Amostral",title="")+
+  theme_minimal()
+```
+
+Na sequência é feita a análise para avaliar se a série apresenta outliers, os quais podem influenciar na modelagem.
+
+```{r graf24, include=TRUE, fig.cap="Gráfico Boxplot da série amostral"}
+boxplot(d2)
+```
+
+Na Figura \ref{fig:graf24}, no Boxplot é indicado a existência de alguns pontos acima do limite, o que torna-os possíveis outliers. Para a confirmação foram testados três observações $(105, 101, 97)$, mas nenhuma foi considerada outlier e assim não foram retiradas da série temporal. A partir de então será iniciados os testes para avaliar normalidade, tendência determinística, raiz unitária e sazonaliade.
+
+```{r, include=FALSE}
+test <- rosnerTest(d2, k=3) #k= n?meros de possiveis outliers
+test$all.stats
+
+# não apresenta outliers significativos
+```
+
+
+## Aplicação dos Testes
+
+### Teste de normalidade
+
+```{r, include=FALSE}
+## Teste de normalidade --------------------------------------------------------
+
+sha2<-shapiro.test(d2)
+jarque.bera.test(d2)
+#ggqqplot(d2)
+# Não apresenta normalidade, aplicar Boxcox
+
+```
+
+**Teste de Jarque-Bera**, **H0**: Os dados possuem distribuição
+normal.
+
+Com p valor igual a $<3.619\times e^{-08}$, ao nível de significância igual a
+$\alpha=0.05$, conclui-se que rejeitamos **H0**.
+
+**Teste de Shapiro Wilk**, **H0**: Os dados possuem distribuição
+normal.
+
+Com p valor igual a `r sha2$p.value`, ao nível de significância igual a
+$\alpha=0.05$, conclui-se que rejeitamos **H0**.
+
+
+Como a série não apresenta normalidade, aplicou-se inicialmente a transformação de BoxCox nos dados, entretanto, após a transformação foi realizados os testes novamente e a série continuou não apresentando normalidade, por isso, continuamos as análises com os dados originais.
+
+
+### Teste de tendência determinística 
+
+```{r, include=FALSE}
+# Analise de tend?ncia deterministica: 
+
+cox12<-cox.stuart.test(d2,c("two.sided")) #H0: não existe tendencia
+cs12<-cs.test(d2) #H0: não existe tendencia
+run12<-runs.test(d2) #H0: não existe tendencia
+ww12<-trend::ww.test(d2) #H0: não existe tendencia
+mk12<-trend::mk.test(d2,continuity = TRUE) #H0: a série é i.i.d. / não existe tendencia
+mann12<-MannKendall(d2) #H0: não existe tendencia
+
+```
+
+Ao observarmos a Tabela \ref{tab:segundo1}, concluimos que a série apresenta tendência determinística a partir dos testes realizados, em que os p-valores são todos menores que o alpha ($\alpha = 5\%$). Sendo assim, rejeitamos $H_0$, considerando **$H_0$: Sem Tendência Determinística (STD) e $H_1$: Possui Tendência Determinística (TD)**
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Determinística}\label{tab:segundo1}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+Cox-Stuart & \textit{cox.stuart} & STD & TD & `r cox12$p.value` & TD\\
+\hline
+Cox-Stuart & \textit{cs.test} & STD & TD & `r cs12$p.value` & TD\\
+\hline
+Wald-Wolfowitz & \textit{runs.test} & STD & TD &  $9\times e^{-06}$ & TD\\
+\hline
+Wald-Wolfowitz & \textit{ww.test} & STD & TD & $4\times e^{-09}$ & TD\\
+\hline
+Mann-Kendall & \textit{mk.test} & STD & TD & `r mk12$p.value` & TD\\
+\hline
+Mann-Kendall & \textit{MannKendall} & STD & TD & $<2.22 \times e^{-16}$ & TD\\
+\hline
+\end{tabular}
+\end{table}
+
+
+### Teste de raíz unitária
+
+Na Tabela \ref{tab:segundo2}, consideramos "RU" como a hipótese para raíz unitária e "Estacionária" para hipótese de estacionariedade. Pelo teste Aumentado de Dickey-Fuller (ADf) e teste de Phillips-Perron (PP), com $\alpha=0,05$, não rejeitamos a hipótese nula ($H_0$), o que nos indica Raíz Unitária. Agora, pelos testes de Kwiatkowski-Phillips-Schmidt-Shin (KPSS) sendo o primeiro referente a tendência estocástica, indica raíz unitária, com p-valor sendo menor qur$0,01$, rejeitando, portanto, a hipótese nula ($H_0$). Enquanto o segundo teste nos indica que a série apresenta tendência determinística, com p-valor menor que $0,01$, rejeitanfo $H_0$.
+
+
+```{r}
+# Teste para raiz unit?ria: 
+adf12<-adf.test(d2,alternative = c("stationary")) #H0: raiz unitária
+pp12<-pp.test(d2,alternative = c("stationary")) #H0: raiz unitária
+kp12<-kpss.test(d2, null = c("Level")) #H0: Nivel estac
+kpt12<-kpss.test(d2, null = c("Trend")) #H0: Tend estac
+
+# p > a NÃO REJEITA H0
+#para o adf e pp estac e p kpss Tem raiz unitaria em todos
+# e tem tendencia deterministica 
+```
+
+<!-- A partir da Tabela \ref{tab:segundo2}, considere RU como sendo a hipótese de existir raiz unitária e Estacionária como a hipótese de ter estacionariedade. Para o teste Aumentado de Dickey-Fuller (ADF) e teste de Phillips-Perron (PP), observa-se p-valor maior que $0,05$, logo, não rejeitamos a hipótese nula ($H_0$), demostrando Raiz unitária. Agora, segundo os testes de Kwiatkowski-Phillips-Schmidt-Shin (KPSS), sendo o primeiro referente a tendência estocástica, a série apresentou raiz unitária, com p-valor sendo menor que $0,01$, rejeitando a hipótese nula ($H_0$). Já no segundo, referente  a tendência deterministica, temos que a série apresenta tendência deterministica, com p-valor menor que $0,01$, rejeitando $H_0$.    -->
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Estocástica - Raiz Unitária}\label{tab:segundo2}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+ADF & \textit{adf.test} & RU & Estacionária & `r adf12$p.value` & RU\\
+\hline
+PP & \textit{pp.test} & RU & Estacionária & `r pp12$p.value` & Estacionária \\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & RU & `r kp12$p.value` & RU\\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & TD & `r kpt12$p.value` & TD\\
+\hline
+\end{tabular}
+\end{table}
+
+<!-- Com os resultados dos testes das Tabelas \ref{tab:segundo1} e \ref{tab:segundo2}, podemos verificar que a série apresenta as duas tendências, determinística e estocástica. Na sequência é realizado o método de diferenciação na série em estudo. -->
+
+### Testes de Sazonalidade
+Logo abaixo, realizaremos testes para identificar sazonalidade na série ajustada.
+
+```{r, include=FALSE}
+## Sazonalidade 
+kw2<-kw((d2), freq=4, diff=T, residuals=F, autoarima = T) #H0: Não Sazonal
+fried2<-fried((d2), freq=4, diff=T, residuals=F, autoarima = T) #H0: Não Sazonal
+
+# Série sazonal, aplicado com diferenciação (diff= T)
+# Tem sazonalidade
+
+# Seguir por modelos sazonais
+```
+
+Com a série já diferenciada, testamos a presença de sazonalidade nos dados, através do Teste de sazonalidade de Kruskall-Wallis e o de Friedman, em que para ambos os testes, consideramos $H_0$ como a série não sendo sazonal. Na Tabela \ref{tab:exnaosei} estão os p-valor obtidos. Para os dois testes o p-valor foi menor que $0,05$, rejeitando a hipótese nula ($H_0$) e indicando que a série possui sazonalidade.
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Sazonalidade}\label{tab:exnaosei}
+\begin{tabular}{l|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & P-valor & Conclusão\\
+\hline
+Kruskall Wallis & \textit{kw} & Não Sazonal  & `r kw2$Pval` & Sazonal\\
+\hline
+Friedman & \textit{fried} & Não Sazonal & `r fried2$Pval` & Sazonal \\
+\hline
+\end{tabular}
+\end{table}
+
+
+## Modelagem
+
+Inicialmente, para a modelagem foi feita a divisão da série temporal entre treino e teste. Na série de treino ficou definida 100 observações, enquanto que para a série de teste ficou 8 observações. Com o objetivo de aplicar sobre o modelo de treino e depois avaliar a acurácia, no modelo de teste. Na Figura \ref{fig:graf25}, através do gráfico, é possível perceber a divisão feita na série temporal.
+
+```{r, include=FALSE}
+# Treino e Teste  
+
+dts<-ts(d2,start = c(1960,1), frequency = 4)
+#Separar a serie em treino e teste:
+tr<- ts(d2,start = c(1960,1),end = c(1984,4), frequency = 4) 
+te<- ts(d2[101:108],start = c(1985,1), frequency = 4)
+# Representando aproximadamente 85% para treino e 15% para teste.
+
+#Aplica-se sobre o modelo de treino e dps testa a acuracia no modelo de teste.
+
+#Grafico do modelo de treino e de teste, divisao feita:
+
+d1b<-c(tr,te)
+d2b<-c(rep("Treino",100),rep("Teste",8))
+date <- as.Date("1960/01/01")
+t1<-seq(date, by = "quarter", length.out = length(d1b))
+dt<-data.frame(d1b,d2b,t1)
+```
+
+
+```{r graf25, include=TRUE, fig.cap="Gráfico da série do exercicio 2 dividida em treino e teste"}
+
+# Vou fazer uma função para os graficos dps
+ggplot(dt) +
+  aes(x = t1, y = d1b, colour = d2b) +
+  geom_line(size = 0.5) +
+  scale_color_brewer(palette = "Set1", direction = 1) +
+  labs(x = "Tempo", y = "Dados", color= "Modelo") +
+  theme_minimal()
+```
+
+Foram considerados dois modelos SARIMA:
+
+\begin{itemize}
+	\item Modelo 1 =  SARIMA(3,1,1)(0,1,1)[4] 
+	\item Modelo 2 =  SARIMA(0,1,1)(0,1,0)[4]
+	\item Modelo 3 =  SARIMA(0,1,1)(1,1,1)[4]
+\end{itemize} 
+
+
+## Cálculo das medidas de acurácia
+
+Considerando o critério de informação de Akaike (AIC), todos os modelo estão próximos, afinal eles apresentaram uma pequena diferença, o modelo 1 resultou em $935,3$ enquanto que o modelo 2 foi de $947,7$ e por ultimo o modelo 3 com $951,4$.
+
+```{r, include=FALSE}
+mod1<-arima(x = tr,order = c(3,1,1),seasonal = list(order = c(0, 1, 1), period = 4))
+mod2<-arima(x = tr,order = c(0,1,1),seasonal = list(order = c(0, 1, 0), period = 4))
+# mod1 foi selecionado pelo auto.arima para o tr e o mod2, essa vai ser a comparação
+
+mod3<-arima(x = tr,order = c(0,1,1),seasonal = list(order = c(1, 1, 1), period = 4))
+# Esse foi o melhor pelo treco do professor, da para acrescestar
+
+mod1.for<-forecast(mod1,h=8)
+mod2.for<-forecast(mod2,h=8)
+mod3.for<-forecast(mod3,h=8)
+
+
+ac.mod1.for<-accuracy(mod1.for$mean,te)
+ac.mod2.for<-accuracy(mod2.for$mean,te)
+ac.mod3.for<-accuracy(mod3.for$mean,te)
+
+
+ac.mod.for<-rbind(ac.mod1.for,ac.mod2.for,ac.mod3.for)
+rownames(ac.mod.for)<-c("Modelo 1","Modelo 2","Modelo 3")
+mypdf1::pdf1_tbl(ac.mod.for)
+
+```
+
+Agora, na Tabela \ref{tab:tab54}, é apresentado as medidas de acúracia de cada modelo, realizadas sobre a série de treino, nota-se que o modelo 2 apresentou menores erros de previsão, apenas no teste ACF1 que o modelo 1 apresentou-se menor. Com essas análises, podemos perceber que o modelo 2 teve melhor ajuste e menores erros de previsão. Portanto utilizaremos o modelo 2 para realizar as previsões.
+
+```{r tab54, include=TRUE}
+mypdf1::pdf1_tbl(ac.mod.for,"Medidas de acurácia para a série do exercicio 2")
+
+```
+
+
+## Análise de resíduo do modelo escolhido
+
+```{r,include=FALSE}
+#Análise de Resíduos: -------------------------------------------------------- #
+
+mod2<-arima(x = d2,order = c(0,1,1),seasonal = list(order = c(0, 1, 0), period = 4))
+#Modelo Ajstado
+#summary(mod)
+#Verificação das Suposições do Modelo
+plot(mod2)
+#Polinômios conforme Brockwell e Davis (1991)
+coeftest(mod2)
+#Intervalo de Confiança dos parâmetros
+#confint(mod3,level=0.95)
+#Análise de Resíduos
+res.mod<-mod2$residuals
+#ggtsdisplay(res.mod)
+Box.test(res.mod,lag = 15, type="Ljung") 
+#h0: são não correlacionados
+#checkresiduals(mod,lag=15,df=15,test="LB")
+shapiro.test(res.mod)
+adf.test(res.mod, alternative ="stationary")
+ggqqplot(res.mod)
+```
+
+Na Figura \ref{fig:uni2} é apresentado o gráfico com os cículos unitários, em que são calculadas as inversas das raízes de cada polinômio autoregressivo e de médias móveis. Nesse caso todas as raízaes estão dentro do círculo unitário, logo eles são inversíveis e estacionários. 
+
+```{r uni2,fig.cap="Representação do circulo unitário para o modelo 2"}
+plot(mod2)
+```
+Pelo Box-Ljung test os resíduos não apresentaram correlação, com p-valor = 0,1, e utilizando lag = 15. Pelo Dickey-Fuller Test os resíduos apresentaram estacionariedade, com $p-valor = 0,01$. Os resíduos não apresentaram normalidade (shapiro.test, $p-valor = 2\times e^{-05}$).
+
+## Predição/Previsão do modelo escolhido
+
+
+Na Tabela \ref{tab:tabprev2} é apresentado as previsões para os próximos 8 treimestres utilizando o modelo 2, nota-se que a cada mês espera-se uma alterção entre $385,4$ a $1239,9$ e pela Figura \ref{fig:grafpred2} vemos esse ajuste da predição do modelo SARIMA(0,0,1)(0,1,0)[4] e da previsão de 8 trimestres para a série original, com os limites $95\%$.
+```{r tabprev2, include=TRUE}
+predict.mod<-forecast(mod2,h = 8) # Previsão de 1 ano
+mypdf1::pdf1_tbl(predict.mod,title = "Previsão de 8 trimestres para o modelo 2")
+```
+
+```{r grafpred2, include=TRUE, fig.cap="Gráfico da série contendo a predição do modelo final SARIMA(0,0,1)(0,1,0)[4] e predição de 8 trimestres, com limites superior e inferior de 95\\%."}
+
+d<-d2
+tmp.df<-cbind(d,predict.mod$mean,predict.mod$upper[,2],
+              predict.mod$lower[,2],predict.mod$fitted)
+colnames(tmp.df)<-c("Dados","Previsão","LS","LI","Predição")
+date <- as.Date("1960/01/01")
+Time<-seq(date, by = "quarter", length.out = length(d)+8)
+predict.df<-data.frame(Time,tmp.df)
+#tail(predict.df)
+
+# Apenas acrescentar a parte de predição e o tempo em meses/anos
+dt1<- predict.df |>
+  tidyr::pivot_longer(`Dados`:`Predição`,
+                      names_to = "series", values_to = "valor")
+ggplot(dt1) +
+  aes(x = Time, y = valor, colour = series) +
+  geom_line(size = 0.5) +
+  scale_color_manual(
+    values = c(Dados = "black",
+               LI = "#128928",
+               LS = "#08E419",
+               Predição = "red",
+               Previsão = "blue")
+  ) +
+  labs(x = "Tempo", y = "Dados", color= "Modelo") +
+  theme_minimal()
+```
+
+
+
+
+
+

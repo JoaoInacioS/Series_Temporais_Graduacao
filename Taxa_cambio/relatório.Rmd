@@ -1,0 +1,380 @@
+---
+title: "Atividade 2 - Séries Temporais I"
+author: 
+  - Joelmir Junior^[joelmirjunior6@gmail.com]
+  - Glaucio Jorge^[glauciojorge@uol.com.br]
+  - Diego Brenner^[dbrennerdosreis@gmail.com]
+date: "`r format(Sys.time(), '%B %Y')`" #mes e ano automat
+geometry: margin=2cm
+output: bookdown::pdf_document2
+header-includes:
+   - \usepackage[brazil]{babel} #português
+   - \usepackage{float} #local das tabelas
+toc: true #sumário
+number_sections: true #numeração
+editor_options:
+  chunk_output_type: console #para visualizar os resultados no console
+#bibliography: ["ref.bib"] #arquivo com as referencias
+#bibliographystyle: "plain" #estilo das referencias
+link-citations: true #para aparecer o link na ref e acessar o site com 1 click
+---
+
+```{r setup, include=FALSE}
+{
+  library(tinytex)
+  library(seastests)
+  library(tseries)
+  library(forecast)
+  library(ggplot2)
+  library(plotly)
+  # library(TTR)
+  # library(readxl)
+  # library(mvtnorm)
+  # library(tidyquant)
+  library(dplyr)
+  # library(astsa)
+  # library(L1pack)
+  # library(webr)
+  # library(randtests)
+  # library(Kendall)
+  # library(EnvStats)
+  # library(trend)
+  # library(seastests)
+  library(knitr)
+  #library(datasets)
+  suppressMessages(library(moments))
+  suppressMessages(library(webr))
+  suppressMessages(library(randtests))
+  suppressMessages(library(Kendall))
+  suppressMessages(library(trend))
+  suppressMessages(library(tseries))
+}
+
+knitr::opts_chunk$set(echo=FALSE,error=F,message=F,warning=F,fig.pos = 'H',fig.align = 'center',fig.width=7.8, fig.height=4.65)
+#widht=largura
+
+options(digits=4)
+options(OutDec=",")
+```
+
+\newpage
+
+<!-- %comentarios e lembretes  -->
+<!--  $82,26\%$ #como usar percetagem  
+assim que se comenta em rmark clique: Ctrl + Shift + C-->
+<!-- Rodapé: teste^[testo] -->
+<!-- [^1]:[[Acesse o banco de dados aqui](https://www3.bcb.gov.br/sgspub/localizarseries/localizarSeries.do?method=prepararTelaLocalizarSeries)] tentando fazer a merda do rodapé a 30k anos-->
+<!-- tem que revisar as tabelas para ver se estão com as interpretações corretas-->
+<!-- Quando quer referenciar graf e tabelas sempre cuidar o label e o nome do chunk, para chunk é preciso estar preenchido "fig.cap=" -->
+<!-- echo=TRUE, results='hide' mostra o cod no relatorio e esconde os resultados, para não rodar,eval=F, indica se o código deve ser executado  -->
+
+\newpage
+# Análise Inicial da série temporal
+
+Considerando as observações do Federal Reserve Bank of New York - Dados de taxa de câmbio de moeda estrangeira do “Modelo de séries temporais não lineares em finanças empíricas” (Franses e Van Dijk, 2000). As taxas de câmbio são o dólar australiano, a libra esterlina, o dólar canadense, o marco alemão, o florim holandês, a frança francesa, o iene japonês e o franco suíço, todos expressos em unidades da moeda estrangeira por dólar americano.
+
+Os dados são diários de 31 de dezembro de 1979 até 31 de dezembro de 1992 contando com 4.773 observações, onde podemos visualizar na Figura \ref{fig:graf1}.
+
+```{r graf1, include=TRUE, fig.cap="Gráfico da série amostral"}
+dados<-read.table("Bank_New_York.txt", header = T)
+dadosplot<-ts(dados,start=c(1979,365), frequency=365.25)
+autoplot(dadosplot)+labs(y = "Taxa", x = "Tempo (Dias)", title="Gráfico da série: taxas de câmbio de moeda estrangeira de 1979 até 1992")+theme_minimal()
+```
+
+Logo na Figura \ref{fig:graf2}, que mostra a função de autocorrelação amostral, podemos observar que existe autocorrelação, contendo um decaimento bem lento que indica uma dependência entre as observações. 
+
+```{r graf2, fig.width = 6, fig.height = 3.7, include=TRUE, fig.cap="Gráfico da Função de autocorrelação amostral"}
+ggAcf(dadosplot, lag.max=200,type = c("correlation"))+labs(y = "FAC Amostral",title="")+
+  theme_minimal()
+```
+
+Na Figura \ref{fig:graf4} é feita uma análise para avaliar se a série apresenta outliers, os quais podem influenciar na modelagem, através de um Boxplot. Neste gráfico, fica evidente que não temos observações fora dos limites, não indicando a possibilidade de outliers. Após análise incial da série, iniciaremos com os testes para avaliar normalidade, tendência determinística e raiz unitária.
+
+```{r graf4, fig.width = 6, fig.height = 3.7, include=TRUE, fig.cap="Gráfico Boxplot da série amostral"}
+boxplot(dadosplot)
+```
+
+# Aplicação dos Testes
+
+Nesta seção, serão realizados os testes necessários para tomar algumas conclusões sobre a série temporal, principalmente quanto à normalidade e tendências determinísticas ou estocásticas. Para que após isto possamos tomar as melhores decisões para os próximos passos da análise.
+
+## Testes de normalidadade
+
+```{r echo=TRUE}
+## Teste de normalidade 
+
+sha1<-shapiro.test(dadosplot) 
+jqb1<-jarque.bera.test(dadosplot) 
+```
+
+**Teste de Jarque-Bera**, **H0**: Os dados possuem distribuição
+normal.
+
+Com p valor igual a `r jqb1$p.value`, ao nível de significância igual a
+$\alpha=0.05$, conclui-se que rejeitamos **H0**.
+
+**Teste de Shapiro Wilk**, **H0**: Os dados possuem distribuição
+normal.
+
+Com p valor igual a `r sha1$p.value`, ao nível de significância igual a
+$\alpha=0.05$, conclui-se que rejeitamos **H0**.
+
+
+Através destes dados, conclui-se que a série não apresenta normalidade.
+
+## Testes de sazonalidade
+```{r}
+kw1<-kw((dadosplot), freq=365, diff=T, residuals=F, autoarima = T) #H0: Não Sazonal
+fried1<-fried((dadosplot), freq=365, diff=T, residuals=F, autoarima = T) #H0: Não Sazonal
+# Série sazonal, aplicado com diferenciação (diff= T)
+```
+
+Com a série já diferenciada, testamos a presença de sazonalidade nos dados através dos Testes de sazonalidade de Kruskall-Wallis e Friedman, em que para ambos os testes, consideramos $H_0$ como a série não sendo sazonal. Na Tabela \ref{tab:exercicio13} estão os p-valor obtidos. Para os dois testes o p-valor foi maior que $0,05$, rejeitando a hipótese alternativa ($H_1$) e indicando que a série não possui sazonalidade.
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Sazonalidade}\label{tab:exercicio13}
+\begin{tabular}{l|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & P-valor & Conclusão\\
+\hline
+Kruskall Wallis & \textit{kw} & Não Sazonal  & `r kw1$Pval` & Não Sazonal\\
+\hline
+Friedman & \textit{fried} & Não Sazonal & `r fried1$Pval` & Não Sazonal \\
+\hline
+\end{tabular}
+\end{table}
+
+
+## Teste de tendência deterministica
+
+Para verificarmos a presença de tendência na série, faremos inicialmente uma análise visual, através da Figura \ref{fig:graf7} que nos indica uma tendência polinomial, onde confirmaremos com base nos testes abaixo.
+```{r graf7, fig.width = 6, fig.height = 3.7, include=TRUE, fig.cap="Gráfico da tendência na série temporal"}
+t<-1:length(dadosplot)
+df.dados2<-ts(dados,start=c(1979,365), frequency=365.25)
+ggplot(df.dados2, aes(x=t, y=dadosplot)) +
+  geom_line() +
+  geom_smooth(method = lm,formula=y~x+I(x^2)+I(x^3),se=TRUE)+
+  labs(y = "Taxa", x = "Tempo (Dias)")+theme_minimal()
+```
+
+```{r include=FALSE}
+# Analise de tendência deterministica: 
+cox1<-cox.stuart.test(dadosplot,c("two.sided")) 
+cs1<-cs.test(dadosplot) 
+run1<-runs.test(dadosplot) 
+ww1<-trend::ww.test(dadosplot) 
+mk1<-trend::mk.test(dadosplot,continuity = TRUE) 
+mann1<-MannKendall(dadosplot) 
+```
+
+Pela Tabela \ref{tab:exercicio1} abaixo, verificamos que em todos os testes de tendência determinística aplicados, os p-valores são inferiores ao alpha ($\alpha = 5\%$). Portanto, rejeita-se a hipótese nula ($H_0$), **considerando como $H_0$: Sem Tendência Determinística (STD) e $H_1$: Possui Tendência Determinística (TD)**. 
+
+Sendo assim, conclui-se pelos testes realizados que a série apresenta tendência determinística. 
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Determinística}\label{tab:exercicio1}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+Cox-Stuart & \textit{cox.stuart} & STD & TD & $1 \times e{-6}$ & TD\\
+\hline
+Wald-Wolfowitz & \textit{runs.test} & STD & TD &  $<2 \times e^{-16}$ & TD\\
+\hline
+Wald-Wolfowitz & \textit{ww.test} & STD & TD & $<2 \times e^{-16}$ & TD\\
+\hline
+Mann-Kendall & \textit{mk.test} & STD & TD & $<2 \times e^{-16}$ & TD\\
+\hline
+Mann-Kendall & \textit{MannKendall} & STD & TD & $<2 \times e^{-16}$ & TD\\
+\hline
+\end{tabular}
+\end{table}
+
+## Teste de tendência estocástica
+
+```{r}
+# Teste para raiz unitaria:## 
+
+adf1<-adf.test(dadosplot,alternative = c("stationary"))
+pp1<-pp.test(dadosplot,alternative = c("stationary"))
+kp1<-kpss.test(dadosplot, null = c("Level"))
+kpt1<-kpss.test(dadosplot, null = c("Trend"))
+
+# p > a NÃO REJEITA H0
+# Tem raiz unitaria em todos
+#e tem tendencia deterministica no ultimo teste
+```
+
+A partir da Tabela \ref{tab:exercicio12}, considere RU como sendo a hipótese de existir raiz unitária e Estacionária como a hipótese de ter estacionariedade. Para o teste Aumentado de Dickey-Fuller (ADF) e teste de Phillips-Perron (PP), observa-se p-valor maior que $0,05$, logo, não rejeitamos a hipótese nula ($H_0$), demostrando Raiz unitária. Agora, segundo os testes de Kwiatkowski-Phillips-Schmidt-Shin (KPSS), sendo o primeiro referente a tendência estocástica, a série apresentou raiz unitária, com p-valor sendo menor que $0,01$, rejeitando a hipótese nula ($H_0$). Já no segundo, referente  a tendência deterministica, temos que a série apresenta tendência deterministica, com p-valor menor que $0,01$, rejeitando $H_0$.   
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Estocástica - Raiz Unitária}\label{tab:exercicio12}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+ADF & \textit{adf.test} & RU & Estacionária & `r adf1$p.value` & RU\\
+\hline
+PP & \textit{pp.test} & RU & Estacionária & `r pp1$p.value` & RU \\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & RU & `r kp1$p.value` & RU\\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & TD & `r kpt1$p.value` & TD\\
+\hline
+\end{tabular}
+\end{table}
+
+Com os resultados dos testes das Tabelas \ref{tab:exercicio1} e \ref{tab:exercicio12}, podemos verificar que a série apresenta as duas tendências, determinística e estocástica. Na sequência é realizado o método de diferenciação na série em estudo.
+
+# Retirando a tendência da série
+
+Para eliminarmos a tendência da série foi necessário realizar apenas uma diferenciação. Abaixo temos os gráficos da série temporal diferenciada e de sua função de autocorrelação, respectivamente.
+
+```{r graf 5, fig.width = 6, fig.height = 3.7,  include=TRUE, fig.cap="Gráfico da série sem tendência"}
+dados.diff<-diff(dadosplot,differences = 1)
+autoplot(dados.diff)+labs(y = "Taxa", x = "Tempo (Dias)")+theme_minimal()
+```
+
+```{r graf 6, fig.width = 6, fig.height = 3.7, include=TRUE, fig.cap="Gráfico da Função de autocorrelação da série diferenciada"}
+ggAcf(dados.diff, lag.max=2000,type = c("correlation"))+labs(y = "FAC Amostral",title="")+
+ theme_minimal() 
+```
+
+
+## Testes de tendência na série diferenciada.
+
+Realizamos novamente os testes, tanto os de Tendência determinística quanto os de Raiz unitária, para verificar se a série ainda possui tendências.
+
+```{r}
+# Analise de tendencia deterministica ajustado:###
+cox3<-cox.stuart.test(dados.diff,c("two.sided"))
+
+run3<-runs.test(dados.diff)
+ww3<-trend::ww.test(dados.diff) #rej h0
+mk3<-trend::mk.test(dados.diff,continuity = TRUE)
+mann3<-MannKendall(dados.diff)
+#p>a n rejeitamos h0
+```
+
+Pela Tabela \ref{tab:exercicio13}, observa-se que para a maioria dos testes, p-valor > alpha, logo, não rejeitamos $H_0$, concluido que a série está sem tendência deterministica. Também verificamos que para o teste de Wald-Wolfowitz com a rotina \textit{ww.test}, rejeita $H_0$ e aceita-se a hipotese de tendência deterministica. E através da Tabela \ref{tab:exercicio14}, constata-se que para a maior parte dos testes, a série está estacionária. 
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Determinística para a série diferenciada}\label{tab:exercicio13}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+Cox-Stuart & \textit{cox.stuart} & STD & TD & `r cox3$p.value` & STD\\
+\hline
+Wald-Wolfowitz & \textit{runs.test} & STD & TD &  $0.1766$ & STD\\
+\hline
+Wald-Wolfowitz & \textit{ww.test} & STD & TD & $0.0002446$ & TD\\
+\hline
+Mann-Kendall & \textit{mk.test} & STD & TD & `r mk3$p.value` & STD\\
+\hline
+Mann-Kendall & \textit{MannKendall} & STD & TD & $0.16961$ & STD\\
+\hline
+\end{tabular}
+\end{table}
+
+```{r }
+# Teste para raiz unitária ajustado: ####
+adf3<-adf.test(dados.diff,alternative = c("stationary"))
+pp3<-pp.test(dados.diff,alternative = c("stationary"))
+kp3<-kpss.test(dados.diff, null = c("Level")) #p>a
+kpt3<-kpss.test(dados.diff, null = c("Trend"))
+
+#a>p rej h0
+```
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Estocástica - Raiz Unitária para a série diferenciada}\label{tab:exercicio14}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+ADF & \textit{adf.test} & RU & Estacionária & `r adf3$p.value` & Estacionária\\
+\hline
+PP & \textit{pp.test} & RU & Estacionária & `r pp3$p.value` & Estacionária \\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & RU & `r kp3$p.value` & Estacionária\\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & TD & `r kpt3$p.value` & TD\\
+\hline
+\end{tabular}
+\end{table}
+
+Com os resultados dos testes das Tabelas \ref{tab:exercicio13} e \ref{tab:exercicio14}, pode-se concluir que a série está sem tendência.
+
+# Ajuste do modelo
+
+```{r include=FALSE}
+dadosplot<-ts(dados,start=c(1979,01), frequency=365)
+mod1 <- HoltWinters(dadosplot,seasonal="additive")
+mod2 <- HoltWinters(dadosplot,seasonal="multiplicative")
+save(mod1,file="mod1")
+save(mod2,file="mod2")
+load("mod1")
+load("mod2")
+
+mod1.for<-forecast(mod1,h = 365)
+mod2.for<-forecast(mod2,h = 365)
+```
+
+
+```{r eval=FALSE, Eval=T, include=FALSE}
+tr<- ts(dadosplot[1:3341],start = c(1979,01), frequency = 365) 
+te<- ts(dadosplot[3342:4773],start = c(1988,365), frequency = 365)
+mod1 <- HoltWinters(tr,seasonal="additive")
+mod2 <- HoltWinters(tr,seasonal="multiplicative")
+save(mod1,file="mod1_tr")
+save(mod2,file="mod2_tr")
+load("mod1_tr")
+load("mod2_tr")
+
+mod1.for<-forecast(mod1,h = 365)
+mod2.for<-forecast(mod2,h = 365)
+
+ac.mod1.for<-accuracy(mod1.for)
+ac.mod2.for<-accuracy(mod2.for)
+
+ac.mod.for<-rbind(ac.mod1.for,ac.mod2.for)
+rownames(ac.mod.for)<-c("Modelo 1","Modelo 2")
+mypdf1::pdf1_tbl(ac.mod.for)
+```
+
+Agora, na Tabela \ref{tab:exercicio14}, é apresentado as medidas de acúracia de cada modelo, realizadas sobre a série de treino. Nota-se que o modelo 1 apresentou menores erros de previsão, portanto com essas análises, podemos perceber que o modelo 1 teve melhor ajuste.
+
+```{r tab4, eval=FALSE, Eval=T, include=FALSE}
+mypdf1::pdf1_tbl(ac.mod.for,"Medidas de acurácia")
+```
+
+\begin{table}[h]
+\centering 
+\caption{Medidas de acurácia}\label{tab:exercicio14}
+\begin{tabular}{l|r|r|r|r|r|r|r}
+\hline
+Modelo & ME & RMSE & MAE & MPE & MAPE & MASE & ACF1\\
+\hline
+Modelo 1 & $-1 \times e^{-4}$ & 0,0043  & 0,0031 & -0,0049 & 0,2418 & 0,0476 & 0,2153\\
+\hline
+Modelo 2 & $-1 \times e^{-4}$ & 0,0044  & 0,0032 & -0,0053 & 0,2465 & 0,0486 & 0,2306 \\
+\hline
+\end{tabular}
+\end{table}
+
+# Previsão
+Após examinar a estacionariedade, a tendência determinística, asazonalidade, ajustar e selecionar o modelo da série temporal com base no erro de previsão e concluir pela aceitação do modelo Holt-Winters Aditivo, o objetivo final é fazer previsões para gerar resultados que extrapolem o limite temporal da série de dados. Assim, com base na estatística MAPE = 0,2417 do modelo Holt-Winters Aditivo que indica um erro de previsão de apenas 24,17%, considera-se que o modelo selecionado apresenta boa performace preditiv ao nível de significância de 5%.
+
+```{r graf 7, fig.width = 6, fig.height = 3.7, include=TRUE, fig.cap="Gráfico modelo Holt-Winters aditivo"}
+autoplot(mod1.for)
+```
+
+
+
+

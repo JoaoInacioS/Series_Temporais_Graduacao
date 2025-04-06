@@ -1,0 +1,530 @@
+---
+title: "Trabalho 1 - Séries Temporais"
+author: 
+  - Caroline Cogo Carneosso^[carolcogo808@gmail.com]
+  - João Inácio Scrimini^[joao.inacio.scrimini@gmail.com]
+  - Renata F. Stone^[renastan@gmail.com]
+date: "`r format(Sys.time(), '%B %Y')`" #mes e ano automat
+geometry: margin=2cm
+output: bookdown::pdf_document2
+header-includes:
+   - \usepackage[brazil]{babel} #português
+   - \usepackage{natbib} #referencias
+   - \usepackage{float} #local das tabelas
+toc: true #sumário
+number_sections: true #numeração
+editor_options:
+  chunk_output_type: console #para visualizar os resultados no console
+bibliography: ["ref.bib"] #arquivo com as referencias
+bibliographystyle: "plain" #estilo das referencias
+link-citations: true #para aparecer o link na ref e acessar o site com 1 click
+---
+
+```{r setup, include=FALSE}
+library(tseries)
+library(forecast)
+library(ggplot2)
+library(plotly)
+library(magrittr) 
+library(ggseas) 
+library(lmtest)
+library(ggpubr)
+library(fma)
+#library(tsdl)
+library(TTR)
+library(readxl)
+library(tidyquant)
+library(dplyr)
+library(astsa)
+library(L1pack)
+library(webr)
+library(randtests)
+library(Kendall)
+library(FitAR)
+library(trend)
+library(seastests)
+library(knitr)
+suppressMessages(library(moments))
+
+knitr::opts_chunk$set(echo=FALSE,error=F,message=F,warning=F,fig.pos = 'H',fig.align = 'center',fig.width=7.8, fig.height=4.85)
+options(digits=4)
+options(OutDec=",")
+
+```
+
+
+```{r inicial}
+dados<-read_excel("Taxadados.xlsx",col_types = c("date", "numeric"))
+#head(dados)
+attach(dados)
+```
+\newpage
+
+<!-- %comentarios e lembretes  -->
+<!--  $82,26\%$ #como usar percetagem  
+assim que se comenta em rmark clique: Ctrl + Shift + C-->
+<!-- Rodapé: teste^[testo] -->
+<!-- [^1]:[[Acesse o banco de dados aqui](https://www3.bcb.gov.br/sgspub/localizarseries/localizarSeries.do?method=prepararTelaLocalizarSeries)] tentando fazer a merda do rodapé a 30k anos-->
+<!-- tem que revisar as tabelas para ver se estão com as interpretações corretas-->
+<!-- na parte das tabelas podemos colocar como rodape, o significado das siglas tipo: STNS= serie temp não sazonal -->
+<!-- tem que revisar as hipoteses para os TESTE DE KRUSKALWALLIS E DO QS -->
+<!-- Quando quer referenciar graf e tabelas sempre cuidar o label e o nome do chunk, para chunk é preciso estar preenchido "fig.cap=" -->
+
+\section{Introdução}
+
+De acordo com o Banco Central Brasileiro (BCB) na operação de crédito, o banco ou outra instituição financeira (credor) oferece ao devedor recursos financeiros, com o compromisso de que o valor seja pago em uma data futura com juros e encargos definidos, afinal ela ocorre perante contrato. As operações de crédito podem ser empréstimo, financiamento e arrendamento mercantil (leasing).
+
+Desse modo, por ser uma operação muito recorrente, exige o controle sobre a inadimplência de crédito. Esse é um assunto que muito interessa tanto reguladores como as instituições financeiras, por estar diretamente relacionado à mensuração do risco de crédito do sistema financeiro como um todo.
+
+As estatísticas monetárias e de crédito^[Disponível em https://www.bcb.gov.br/estatisticas/estatisticasmonetariascredito], recentemente divulgadas, no dia vinte oito de dezembro de dois mil e vinte um, pelo BCB apresentaram que a inadimplência total permaneceu estável em novembro, em 2,3%. Já o saldo das operações de crédito do Sistema Financeiro Nacional (SFN) alcançou R$4,6 trilhões em novembro, crescendo 1,8% no mês, com aumentos de 2,0% na carteira de pessoas físicas. Portanto, pretende-se com esse trabalho identificar através de uma série de dez anos o comportamento da taxa de inadimplência das operações de crédito, com o intuito de estimar previsões futuras com o menor erro.
+
+A taxa de inadimplência das operações de crédito do SFN, nesse estudo foi explorada para o estado do Rio Grande do Sul e somente para as Pessoas físicas. Os dados são mensais dos últimos dez anos, de janeiro de 2011 à outubro de 2021, do banco de dados^[Disponível em https://www3.bcb.gov.br/sgspub/localizarseries/localizarSeries.do?method=prepararTelaLocalizarSeries] disponível no site do BCB com `r nrow(dados)` observações.
+
+O trabalho está organizado conforme segue. A Seção $2$ apresenta a análise de série temporal. Essa seção contêm uma breve análise descritiva, testes para avaliar a existência de tendência sendo elas determinística e estocástica. Após avaliada a tendência é realizado os ajustes de tendência e teste para avaliar se há sazonalidade. Por fim, é feita a análise de previsão, junto com as medidas dos critérios de seleção e acurácia do modelo que será explorado. Na Seção $3$ está as considerações finais sobre o estudo e na Seção $4$ as referências utilizadas no presente trabalho.
+
+\newpage
+\section{Análise da Série Temporal}
+
+Nessa seção será discutida todas as análise necessárias para avaliar as propriedades da série temporal da taxa de inadimplência das operações de crédito do SFN no estado do Rio Grande do Sul para pessoas físicas durante os últimos dez anos. Todas elas foram elaboradas no software @R-base.
+
+\subsection{Análise Descritiva}
+
+```{r graf1, fig.cap= "Gráfico da Série Temporal da taxa de inadimplência das operações de crédito do Sistema Financeiro Nacional (SFN), período de janeiro de 2011 à outubro de 2021."}
+ggplot(dados, aes(x=Data, y=TX)) +geom_line()+
+  labs(y = "Taxa", x = "Tempo (meses)", title="")+theme_minimal()
+```
+
+Na Figura \@ref(fig:graf1) é apresentada a série em estudo. É possível notar que existem três picos entre os períodos de 2011 e 2022, sendo aproximadamente nos anos de 2012, 2016 e 2020. Com isso, e tendo em vista que a série é descrescente, já pode-se ver possíveis tendências. Também, podemos visualizar uma possível sazonalidade por volta de 6 meses. Além disso, todo final e meio de ano, aproximadamente, ocorrem uma queda.
+
+Na Tabela \@ref(tab:tab1) está disponível a análise descritiva dos dados, nota-se que a menor taxa obtida nos últimos 10 anos foi de 1,89 e a maior de 3,85. Destaca-se, também, que o valor médio dela é 2,74.
+
+\newpage
+
+
+```{r T1, include=TRUE}
+d<-summary(dados[,2]) ## tirei a primeira coluna  
+knitr::kable(d, format = "latex", row.names = NA,
+  col.names = NA, 'c', caption = "Analise descritiva da taxa de inadimplência.", label = "tab1", escape = TRUE)
+```
+
+```{r graf2, fig.cap= "Gráfico da Função de Autocorrelção amostral (FAC amostral).",fig.height=3.5}
+ggAcf(dados$TX , lag.max=130 , type = c("correlation"))+labs( y = "FAC Amostral ", x = "Lag", title="" )+theme_minimal ( )
+```
+```{r graf3, fig.cap= "Gráfico da Função de Autocorrolação Parcial amostral (FACP amostral).",fig.height=3.5}
+ggAcf(dados$TX ,lag.max=130 , type = c("partial"))+labs( y = "FACP Amostral ", x = "Lag", title="" )+theme_minimal ( )
+```
+
+
+\newpage
+
+Já, considerando a Figura \@ref(fig:graf2) (FAC), pode-se ver que não existe autocorrelação constante, contendo um grande pico e significância no lag 1, diminuindo nos segunites, e voltando a ser significativo nos lags de 90 até 115, aproximadamente. Agora, considerando a Figura \@ref(fig:graf3) (FACP) nota-se que somente o primeiro e sexto lag são significativos, ao decorrer dos lags temos correlações não significativas. Portanto, temos o termo auto-regressivo de ordem dois.
+
+\subsection{Testes de Tendência Determinística}
+
+```{r, include=FALSE}
+# Analise de tendência deterministic:#
+cox1<-cox.stuart.test(dados$TX,c("two.sided"))
+cs1<-cs.test(dados$TX)
+run1<-runs.test(dados$TX)
+ww1<-ww.test(dados$TX)
+mk1<-mk.test(dados$TX,continuity = TRUE)
+mann1<-MannKendall(dados$TX) #tem que ver como inserir o p valor desse na #tab,manual?
+```
+
+Pela Tabela \ref{tab:exemplo1}, em todos os testes de tendência determinística aplicados, os p-valores são inferiores ao alpha ($\alpha = 5\%$). Portanto, rejeita-se a hipótese nula ($H_0$). Sendo assim, pelos testes já realizados a série inicial apresenta tendência deterministica. Considere como $H_0$: Sem Tendência Determinística (STD) e $H_1$: Possui Tendência Determinística (TD).
+
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Determinística}\label{tab:exemplo1}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+Cox-Stuart & \textit{cox.stuart} & STD & TD & `r cox1$p.value` & TD\\
+\hline
+Cox-Stuart & \textit{cs.test} & STD & TD & `r cs1$p.value` & TD\\
+\hline
+Wald-Wolfowitz & \textit{runs.test} & STD & TD & `r run1$p.value` & TD\\
+\hline
+Wald-Wolfowitz & \textit{ww.test} & STD & TD & `r ww1$p.value` & TD\\
+\hline
+Mann-Kendall & \textit{mk.test} & STD & TD & `r mk1$p.value` & TD\\
+\hline
+Mann-Kendall & \textit{MannKendall} & STD & TD & $<2e^{-16}$ & TD\\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Testes de Tendência Estocástica - Raiz Unitária}
+
+Na Tabela \ref{tab:exemplo2}, no teste Aumentado de Dickey-Fuller (ADF) temos um p-valor de 0.05606, muito próximo do valor de alpha ($\alpha = 5\%$), logo ainda é maior que 0.05. Assim, no teste de Phillips-Perron (PP), também, há p-valor maior que 0.05. Portanto, os dois testes não rejeitaram a hipótese nula ($H_0$). Sendo assim, a série, possivelmente, apresenta raiz unitária. Agora, segundo os testes de Kwiatkowski-Phillips-Schmidt-Shin (KPSS), sendo o primeiro referente a tendência estocástica, a série apresentou raiz unitária, com p-valor sendo menor que 0.01, rejeitando a hipótese nula ($H_0$). Já no segundo, referente  a tendência deterninistica, temos que a série não apresenta tendência deterministica, com p-valor maior que 0.1, não rejeitando a hipótese nula ($H_0$).
+
+
+```{r, include=FALSE}
+# Teste para raiz unitária: #
+adf1<-adf.test(dados$TX,alternative = c("stationary"))
+pp1<-pp.test(dados$TX,alternative = c("stationary"))
+kp1<-kpss.test(dados$TX, null = c("Level"))
+kpt1<-kpss.test(dados$TX, null = c("Trend"))
+```
+
+
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência Estocástica - Raiz Unitária}\label{tab:exemplo2}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+ADF & \textit{adf.test} & RU & Estacionária & `r adf1$p.value` & RU\\
+\hline
+PP & \textit{pp.test} & RU & Estacionária & `r pp1$p.value` & RU\\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & RU & `r kp1$p.value` & RU\\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & TD & `r kpt1$p.value` & Estacionária\\
+\hline
+\end{tabular}
+\end{table}
+
+Com esses resultados, podemos verificar que a série provavelmente apresenta as duas tendências, determinística e estocástica. Sendo assim pelos testes, todos apresentaram Raiz unitária, e apenas um dos testes de tendência deterministica, acusou estacionariedade. Portanto, na sequência é realizado ajustes para eliminação da raiz unitária. Considere RU como sendo a hipótese de haver raiz unitária e Estacionária como a hipótese quando se tem tendência estacionária. 
+
+
+<!-- AJUSTE -->
+\newpage
+\subsection{Ajuste de Tendência}
+
+A partir da identificação da necessidade de ajuste, o mesmo é feito sobre a série inicial e foi realizado pelo método da diferença. Assim, todos os testes foram refeitos, verificando se houve melhora no modelo, tornando-o estacionário:
+
+```{r graf4, fig.cap="Gráfico do ajuste por diferença da série inicial."}
+diff.TX<-diff(dados$TX, differences = 1) 
+dados1<-cbind(dados[c(-1),],diff.TX)[,-2]
+
+ggplot(dados1, aes(x=Data, y=diff.TX)) +geom_line()+
+  labs(y = "Diff.TX", x = "Tempo (meses)", title ="")+theme_minimal()
+```
+
+Segundo o Figura \@ref(fig:graf4), já pode-se ver que o ajuste, possivelmente, transformou a série em estacionária. Como vemos, a série visualmente não está apresentando nenhuma tendência, tendo uma aleatoriedade conforme o tempo. E também, visualiza-se melhor a possível sazonalidade que apresenta, ao qual será testada no decorrer deste trabalho.
+
+```{r graf5, fig.cap=" Gráfico da Função de Autocorrelção amostral (FAC amostral) da série ajustada.", fig.height= 4}
+ggAcf(dados1$diff.TX, lag.max=130, type = c("correlation"))+labs(y = "FAC Amostral", title="" )+theme_minimal( )
+```
+```{r graf6, fig.cap="Gráfico da Função de Autocorrolação Parcial amostral (FACP amostral) da série ajustada.",fig.heigth= 4}
+ggAcf(dados1$diff.TX, lag.max=130, type = c("partial"))+labs(y = "FACP Amostral", title="" )+theme_minimal( )
+```
+
+\newpage
+Pela Figura \@ref(fig:graf5), vemos que existem poucos lags com alguma significância, e também, já conseguimos ver que a série apresenta uma autocorrelação constante. Já, analisando a Figura \@ref(fig:graf6), nota-se que nos lags 6 e 9 temos correlações bem significativas, e nos lags 8 e 31, temos correlações com significâncias bem pequenas, seguindo, no restante por correlações não significativas.
+
+```{r,include=F}
+# Analise de tendencia deterministica ajustado: ####
+cox2<-cox.stuart.test(dados1$diff.TX,c("two.sided"))
+cs2<-cs.test(dados1$diff.TX)
+run2<-runs.test(dados1$diff.TX)
+ww2<-ww.test(dados1$diff.TX)
+mk2<-mk.test(dados1$diff.TX,continuity = TRUE)
+mann2<-MannKendall(dados1$diff.TX)#tem que ver como inserir o p valor desse na #tab,manual?
+```
+
+É possível na Tabela \ref{tab:exemplo3} perceber que os p-valor foram superiores ao alpha ($\alpha = 5\%$) em todos os testes de tendência deterministica aplicados. Portanto, não rejeita-se hipótese nula ($H_0$). Sendo assim, pelos testes a série ajustada não apresenta tendência determinística.
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Tendência deterministica do modelo ajustado}\label{tab:exemplo3}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+Cox-Stuart & \textit{cox.stuart} & STD & TD & `r cox2$p.value` & STD\\
+\hline
+Cox-Stuart & \textit{cs.test} & STD & TD & `r cs2$p.value` & STD\\
+\hline
+Wald-Wolfowitz & \textit{runs.test} & STD & TD & `r run2$p.value` & STD\\
+\hline
+Wald-Wolfowitz & \textit{ww.test} & STD & TD & `r ww2$p.value` & STD\\
+\hline
+Mann-Kendall & \textit{mk.test} & STD & TD & `r mk2$p.value` & STD\\
+\hline
+Mann-Kendall & \textit{MannKendall} & STD & TD & `r mann2$sl` & STD\\
+\hline
+\end{tabular}
+\end{table}
+
+```{r, include=F}
+# Teste para raiz unitária ajustado: ####
+adf2<-adf.test(dados1$diff.TX,alternative = c("stationary"))
+pp2<-pp.test(dados1$diff.TX,alternative = c("stationary"))
+kp2<-kpss.test(dados1$diff.TX, null = c("Level"))
+kpt2<-kpss.test(dados1$diff.TX, null = c("Trend"))
+```
+
+Agora visualizando a Tabela \ref{tab:exemplo4}, O teste de ADF apresentou raiz unitária e o teste de PP apresentou 
+estacionaridade, com p-valor maior que alpha e p-valor menor que 0.01, respectivamente. Não rejeitando $H_0$ pelo teste ADF e rejeitando $H_0$ para o teste PP. Os dois testes de KPSS apresentaram estacionaridade, com p-valor maiores que 0.1. Assim, rejeitando suas hipóteses nulas ($H_0$).
+
+
+\begin{table}[h]
+\centering 
+\caption{Testes de Raiz unitária para o modelo ajustado}\label{tab:exemplo4}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+ADF & \textit{adf.test} & RU & Estacionária & `r adf2$p.value` & RU\\
+\hline
+PP & \textit{pp.test} & RU & Estacionária & `r pp2$p.value` & Estacionária\\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & RU & `r kp2$p.value` & Estacionária\\
+\hline
+KPSS & \textit{kpss.test} & Estacionária & TD & `r kpt2$p.value` & Estacionária\\
+\hline
+\end{tabular}
+\end{table}
+
+Todos os testes aplicados sobre o ajuste feito na série inicial indicaram que o ajuste por diferença, retirando a raiz unitária, demostrou-se eficiente, tornando a série estacionária. Entretanto, apenas um dos testes apresentou uma possível raiz unitária no ajuste, mas visualmente e pela maioria dos testes, conclui-se que temos uma série estacionária.
+
+\subsection{Testes de Sazonalidade}
+Considere que para uma série temporal ser sazonal (possuir sazonalidade) é preciso que os fenômenos que ocorrem durante o tempo se repitam em um período idêntico de tempo. Logo, testes pra identificar sazonalidade na série ajustada foram feitos.
+
+Assume-se para $H_0$: Série Temporal Não Sazonal (STNZ) e $H_1$: Série Temporal Sazonal (STS). Todos os testes apresentaram p-valor menores que $\alpha = 5\%$, como pode ser visto na Tabela \ref{tab:exemplo5}. Portanto, rejeita-se $H_0$, concluindo que a série é sazonal. Visualmente, percebemos que essa sazonalidade é de 6 meses. Pelo grafico \@ref(fig:graf5) de autocorrelação fica mais nítida essa informação, contendo significâncias nos lags 6, 12, 18, 24, 30, 36, 42 e 48. Com isso, é apresentada uma forte sazonalidade nesses períodos, logo após é gradativamente reduzida, porém, ainda é mantida.
+
+```{r}
+# Sazonalidade ####
+kw<-kw(ts(dados1$diff.TX), freq=12, diff=T, residuals=F, autoarima = T)
+fr<-fried(ts(dados1$diff.TX), freq=12, diff=T, residuals=F, autoarima = T)
+qs<-qs(ts(dados1$diff.TX), freq=12, diff=T, residuals=F, autoarima = T)
+```
+
+\begin{table}[h]
+\centering 
+\caption{Testes de sazonalidade do modelo ajustado.}\label{tab:exemplo5}
+\begin{tabular}{l|r|r|r|r|r}
+\hline
+Teste & Rotina & $H_0$ & $H_1$ & P-valor & Conclusão\\
+\hline
+Kruskal-Wallis & \textit{kw} & STNZ & STS & `r kw$Pval` & STS\\
+\hline
+Friedman & \textit{fried} & STNZ & STS & `r fr$Pval` & STS\\
+\hline
+QS & \textit{qs} & STNZ & STS & `r qs$Pval` & STS\\
+\hline
+\end{tabular}
+\end{table}
+
+\newpage
+\subsection{Análise de Previsão}
+
+Nessa seção utiliza-se o método de Holt-Winters para fazer a previsão dessa série temporal. Esse método de suavização exponencial utiliza a média móvel, visando representar melhor a tendência e a sazonalidade dos dados para previsão de um período futuro.
+
+A série temporal foi dividida em duas partes, uma para treino e outra para testes, sendo de 2011 até outubro de 2019 a parte de treino, representando 81,4% dos dados e de novembro de 2019 até outubro de 2021 a parte de teste, representando 18,6%. Essa separação está representada na Figura \ref{fig:graf7}.
+
+\begin {figure}[h]
+\centering 
+\includegraphics[width=1\textwidth]{graf7.png}
+\caption {Gráfico dos dados divididos em modelo treino e teste.}\label{fig:graf7} 
+\end {figure}
+
+Como o modelo ajustado apresenta dados tanto positivos quanto negativos e a série se encontra estacionária, não se pode aplicar o método multiplicativo. Portanto, a série foi testada pelos métodos, Holt-Winters aditivo sem fator de amortecimento (HW-A) e Holt-Winters aditivo com fator de amortecimento (HW-AA).
+
+```{r, include=FALSE}
+# Previsão por Holt-winters: ####
+dts<-ts(dados1$diff.TX,start = c(2011,2),end = c(2021,10), frequency = 12)
+
+#Separar a série em treino e teste:
+(tr<- ts(dados1$diff.TX,start = c(2011,2),end = c(2019,10), frequency = 12))
+(te<- ts(dados1$diff.TX[106:129],start = c(2019,11),end = c(2021,10), frequency= 12))
+# Representando aproximadamente 81,4% para treino e 18,6% para teste.
+#Aplica-se sobre o modelo de treino:
+```
+
+Na Tabela \ref{tab:tab7} está indicado os testes de critério de informação de Akaike (AIC), critério Bayesiano de Schwarz (BIC) e critério de informação de Akaike corrigido (AICC) sobre o modelo de treino. O modelo aditivo sem amortecimento (HW-A) apresentou os menores valores nos três testes feitos. Portanto, pelos critérios de seleção de modelo, tem-se o modelo aditivo sem fator de amortecimento (HW-A) como o melhor modelo até agora.
+
+
+```{r,include=TRUE}
+#Como nosso modelo ajustado apresenta dados tanto possitivos quanto negativos
+#e a sÃ©rie se encontra estacionÃ¡ria, nÃ£o podemos aplicar o metodo multiplicativo.
+#Portanto testaremos pelos mÃ©todos aditivo sem e com amortecimento:
+
+mod1 <- hw(tr,seasonal="additive",h=12)
+mod2 <- hw(tr,seasonal="additive",damped =TRUE,h=12)
+
+#mod1t<- HoltWinters(dts,seasonal = "additive")
+#mod1tt<- forecast(mod1t,h=12)
+#plot(mod1tt)
+#summary(mod1tt)
+
+csm.mod1<-c(mod1$model$aic,mod1$model$bic,mod1$model$aicc)
+csm.mod2<-c(mod2$model$aic,mod2$model$bic,mod2$model$aicc)
+
+#scm.mod<-rbind(csm.mod1,csm.mod2)
+#colnames(scm.mod)<-c("AIC","BIC","AICC")
+#rownames(scm.mod)<-c("HW-A","HW-AA")
+#kable(scm.mod, caption = "Medidas dos critérios de seleção do modelo #treino.",label = "tab7")
+
+```
+
+\newpage
+```{r}
+scm.mod<-rbind(csm.mod1,csm.mod2)
+colnames(scm.mod)<-c("AIC","BIC","AICC")
+rownames(scm.mod)<-c("HW-A","HW-AA")
+knitr::kable(scm.mod, caption = "Medidas dos critérios de seleção do modelo treino.",label = "tab7",align="c",escape = F)
+```
+
+
+Na Tabela \ref{tab:tab8} tem-se os testes de acurácia sobre o modelo de treino. Os menores valores foram para o modelo aditivo com fator de amortecimento (HW-AA) em todos os testes, e apenas em ME que teve uma diferença maior, nos outros foram, praticamente, os mesmos valores. Portanto, aproximadamente, os dois conseguem ter as mesmas estimativas para o erro nas previsões.
+
+```{r}
+#O HW-A(mod1) apresenta uma melhor repesentaÃ§Ã£o dos dados nos 3 testes.
+
+#Acuracias:(Outro critÃ©rio de seleÃ§Ã£o)
+
+ac.mod1<-accuracy(mod1)
+ac.mod2<-accuracy(mod2)
+
+ac.mod<-rbind(ac.mod1,ac.mod2)
+rownames(ac.mod)<-c("HW-A","HW-AA")
+kable(ac.mod[,1:6],caption = "Medidas de acurácia do modelo de treino.",label = "tab8")
+```
+
+Já pela Tabela \ref{tab:tab9} se tem os testes de acurácia sobre o modelo de teste. Nota-se que em todos os testes o modelo aditivo com fator de amortecimento (HW-AA) teve valores menores em suas estimações para o erro. Portanto, tem-se que o modelo HW-AA demonstrou ser melhor que o modelo HW-A para previsão dessa série temporal, com os menores erros na previsão.
+
+
+```{r}
+#Aqui em todos os testes HW-AA(mod2) teve um melhor desemprenho, conseguindo
+#ter um menor erro de previs?o referente ao HW-A(mod1). Porem, nada muito
+#distante, sendo praticamente os mesmos resultados.
+
+#Aplicaremos agora sobre o modelo teste(apenas fazemos acuracia):
+
+mod1.for<-forecast(mod1)
+mod2.for<-forecast(mod2)
+
+ac.mod1.for<-accuracy(mod1.for$mean,te)
+ac.mod2.for<-accuracy(mod2.for$mean,te)
+ac.mod.for<-rbind(ac.mod1.for,ac.mod2.for)
+rownames(ac.mod.for)<-c("HW-A","HW-AA")
+
+```
+
+```{r}
+
+kable(ac.mod.for[,1:6],caption = "Medidas de acurácia do modelo de teste, com base no modelo de treino.",label = "tab9")
+```
+
+Com todos os testes de seleção aplicados, pode-se perceber que o melhor modelo para previsão é o de Holt-Winters aditivo com fator de amortecimento (HW-AA). Mesmo contendo valores maiores nos critérios de seleção, ele conseguiu ter um melhor desempenho em suas previsões, cometendo menores erros.
+
+
+```{r}
+# O HW-AA(mod2) teve uma melhor representaÃ§Ã£o, conseguindo ter menor erro de 
+# previs?o em todos os testes.
+
+# Portanto como o mod2, aditivo cem fator de amortecimento, teve melhor ajuste 
+# de previs?o, mesmo contendo maiores medidas de sele??o de modelo, vamos utilizar 
+# esse m?todo para fazer as previs?es da s?rie temporal, pois o m?todo de
+# Holt-Winters com fator de amortecimento conseguiu ter menor estimativas para o erro de previs?o.
+
+#Previs?o de 1 ano:(Definir o tempo de previs?o)
+
+mod2 <- hw(dts,seasonal="additive",damped =TRUE,h=12)
+mod1 <- mod2
+#mod1 <- mod1tt
+s<-summary(mod1)
+csm.s<-c(s$model$aic,s$model$bic,s$model$aicc)
+
+
+#scm.s<-rbind(csm.s)
+#colnames(scm.s)<-c("AIC","BIC","AICC")
+#rownames(scm.s)<-c("HW-AA")
+#kable(scm.s, caption = "Medidas dos critérios de seleção do modelo HW-AA.",label = #"tab10")
+
+#ac.mod2<-accuracy(mod1)
+#rownames(ac.mod2)<-c("HW-AA")
+#kable(ac.mod2, caption = "Medidas de acurácia do modelo HW-AA.",label = "tab11")
+
+#options(scipen=8)
+#kable(mod1, caption = "Previsão de 12 anos pelo de modelo HW-AA.",label = "tab12")
+
+```
+
+Logo, foi feita a previsão da série temporal sobre o modelo com todos os dados. Como pode ser visto nas Tabelas \ref{tab:tab10} e \ref{tab:tab11} com as medidas dos critérios de seleção e medidas de acurácia do modelo escolhido com os dados completos, respectivamente. Já na Tabela \ref{tab:tab12} está a previsão de 12 meses. Sendo assim, o modelo HW-AA conseguiu prever para os próximos 2 anos a taxa de inadimplência das operações de crédito do Sistema Financeiro Nacional no estado do Rio Grande do Sul para pessoa física.
+
+```{r}
+scm.s<-rbind(csm.s)
+colnames(scm.s)<-c("AIC","BIC","AICC")
+rownames(scm.s)<-c("HW-AA")
+kable(scm.s, caption = "Medidas dos critérios de seleção do modelo HW-AA.",label = "tab10")
+```
+
+```{r}
+ac.mod2<-accuracy(mod1)
+rownames(ac.mod2)<-c("HW-AA")
+kable(ac.mod2, caption = "Medidas de acurácia do modelo HW-AA.",label = "tab11")
+```
+
+```{r}
+options(scipen=8)
+kable(mod1, caption = "Previsão de 12 anos pelo de modelo HW-AA.",label = "tab12")
+```
+
+
+
+
+
+\newpage
+Na Figura \ref{fig:graf8}, pode-se perceber que a predição e previsão feita não foge muito da variação e do esperado para o ajuste, obtendo uma boa aproximação do que os dados representam.
+
+\begin {figure}[h]
+\centering 
+\includegraphics{grafico300.png} 
+\caption {Gráfico da Predição-Previsão da Série Temporal da taxa de inadimplência das operações de crédito do Sistema Financeiro Nacional (SFN), período de janeiro de 2011 à outubro de 2021, utilizando o Modelo de Holt-Winters Aditivo com fator de amortecimento (HW-AA).}\label{fig:graf8} 
+\end {figure}
+
+
+Como a previsão de HW-AA foi feita sobre o modelo ajustado estacionário, através do método da diferença. Agora, precisa ser ajustado para o formato dos dados reais da Série Temporal inicial, para assim, ter os valores da taxa de inadimplência das operações de créditos referente a cada mês.
+
+
+```{r}
+
+nov_2021 <- 2.01     - 0.0387
+dec_2021 <- nov_2021 - 0.1469
+jan_2022 <- dec_2021 + 0.0353
+feb_2022 <- jan_2022 + 0.0001
+mar_2022 <- feb_2022 + 0.0131
+apr_2022 <- mar_2022 - 0.0050
+may_2022 <- apr_2022 - 0.0458
+jun_2022 <- may_2022 - 0.1460
+jul_2022 <- jun_2022 + 0.0154
+Aug_2022 <- jul_2022 + 0.0066
+sep_2022 <- Aug_2022 + 0.0131
+oct_2022 <- sep_2022 + 0.0324
+
+Prev_final<- matrix(c(nov_2021, dec_2021, jan_2022, feb_2022, mar_2022, apr_2022, may_2022, jun_2022, jul_2022, Aug_2022, sep_2022, oct_2022))
+
+colnames(Prev_final)<-c("Previsão")
+rownames(Prev_final)<-c("Novembro 2021", "Dezembro 2021", "Janeiro 2022", "Fevereiro 2022", "Março 2022", "Abril 2022", "Maio 2022", "Junho 2022", "Julho 2022", "Agosto 2022", "Setembro 2022", "Outubro 2022")
+kable(Prev_final, caption = "Previsão para a taxa de inadimplência das operações de crédito do Sistema Financeiro Nacional (SFN), para o período de novembro de 2021 à outubro de 2022.",label = "tab13")
+
+```
+
+Na tabela \ref{tab:tab13}, nota-se que as taxas de inadimplência das operações de créditos mantiveram os decaimentos na metade e final do ano. De novembro para dezembro de 2021 as taxas tendem a diminuir  aproximadamente $7,46\%$. Após, devem manter um leve aumento ou estabilidade até junho de 2022, dimiuindo cerca de $14,60\%$, comparado ao mês anterior, maio. Depois, devem seguir o mesmo anterior, um leve aumento ou estabilidade até o final do ano, ou seja, por volta de dezembro.
+
+\newpage
+\section{Considerações Finais}
+
+Portanto, partindo de um banco de dados estacionário foi possível explorar um método, o da diferença, que permitisse encontrar um modelo para o melhor ajuste e previsão dos dados. O melhor modelo foi o Holt-Winters aditivo com fator de amortecimento (HW-AA) que mesmo contendo valores maiores nos critérios de seleção, ele conseguiu ter um melhor desempenho em suas previsões, cometendo menores erros. Sendo assim, o modelo HW-AA conseguiu prever para os próximos 12 meses a taxa de inadimplência das operações de crédito do Sistema Financeiro Nacional no estado do Rio Grande do Sul para pessoa física. Destaca-se que de novembro para dezembro de 2021 as taxas tedem a diminuir $7,46\%$, aproximadamente. Após devem manter um leve aumento ou estabilidade até junho de 2022, dimiuindo $14,60\%$, aproximadamente, comparado ao mês anterior maio.
+
+
+\newpage
+\section{Referências}
+BANCO CENTRAL DO BRASIL,\textbf{ Estatísticas Monetárias e de Crédito.} https://www.bcb.gov.br/estatisticas/estatisticasmonetariascredito. Acessado em 18/01/2022.
+
+
+BANCO CENTRAL DO BRASIL,\textbf{ SGS - Sistema Gerenciador de séries Temporais.} https://www3.bcb.gov.br/sgspub/localizarseries/localizarSeries.do?method=prepararTelaLocalizarSeries. Acessado em 18/01/2022.
+
+.
+
+
+
+
